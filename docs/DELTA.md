@@ -144,20 +144,24 @@
 
 **环境快照（2026-10-08 首次采集）**：Xiaomi 13 / HyperOS `V816`，`1080×2400 @440dpi`，序列号 `9aa4b43e`；字体缩放与深浅色取系统默认（浅色）；自动旋转开着——横屏那张是**顺手抓的额外证据**。
 
-**P0 现状**：本实现已有可对比的实图，但**产品屏还没有**（照片墙/确认页等要 P2 起才出现），所以下表暂时只填"骨架屏"两行，其余等对应阶段补。
+**P0/P1 现状**：本实现有骨架屏与真机自检可对比，**产品屏还没有**（照片墙/确认页等要 P2 起才出现）。参照实现已于 2026-10-08 在**同一台真机**上装好并采到四张空态截图（见下），两边的截图规范就此对齐。
+
+**参照实现是怎么拿到的**（2026-10-08）：源码**只读**复制到 `.reference/wheremy`（gitignore）→ 在副本里用 PATH 上的 Gradle 8.14.3 构建（参照无 wrapper）→ `BUILD SUCCESSFUL`，APK 18,960,302 字节 → 装成 `com.wheremy.app`（与本实现的 `.dsh` 包同机共存）。全过程与账在 `artifacts/REF-build-report.md`；**原目录零改动**（`git status --porcelain` 空 + 20:24 之后无任何文件被写）。
 
 | 屏 | 参照截图 | 本实现截图 | 结论（谁更好 / 差在哪 / 改不改） |
 |---|---|---|---|
 | **骨架 Home**（P0，非产品屏） | 无此屏 | `artifacts/screenshots/P0/device-home-portrait-light.png`、`device-home-landscape-light.png` | 仅证明链路可跑；横屏不锁（参照锁竖屏），布局未自适应，留待 P6 |
 | **设计系统画廊**（P0，开发期样本） | 无此屏 | `device-gallery-portrait-light.png`、`device-gallery-landscape-light.png` + Roborazzi `design-gallery-{light,dark}.png` | token/组件已可视化，可作后续每屏的样式基准 |
+| **数据层自检**（P1，开发期脚手架） | 无此屏 | `artifacts/screenshots/P1/device-selfcheck-portrait.png` | P1 的 7 项真机自检结果上屏，替代"口头说跑过了" |
+| 照片墙空态 | `artifacts/screenshots/REF/01-home-empty.png`（dump：`还没有物品。点右下角的按钮选第一张照片。`） | P2 才有 | 待比 |
+| 待归类空态 | `REF/02-pending-empty.png`（`没有待归类的物品，全都放好了。`） | P2 才有 | 待比 |
+| 设置页（三节） | `REF/03-settings.png`（`到期提醒` 提前 3 天/当天…一年、`还缺 API key…`、`接口地址 base_url`） | P5 才有 | 待比 |
+| 位置页（空态 / 根 / 下钻） | `REF/04-locations.png`（`还没有位置。点右上角「新建」建第一个，例如「家」「主卧」「衣柜」。`） | P4 才有 | 待比 |
 | 照片墙（浅色 · 手机竖屏） | | | |
 | 照片墙（深色 · 手机竖屏） | | | |
 | 照片墙（平板/横屏，参照无此形态） | — | | |
-| 待归类 | | | |
 | 确认页（单件 / 多件） | | | |
-| 位置页（根 / 下钻） | | | |
 | 详情页 | | | |
-| 设置页（三节） | | | |
 | 取景屏 | | | |
 | 空态三种 / 失败态 | | | |
 
@@ -175,7 +179,9 @@
 | 截图回归 | 无 | Roborazzi 1.76.0 ✅ 已落地（当前 2 张：浅/深色画廊基线） | `app/build/outputs/roborazzi/design-gallery-{light,dark}.png`；`recordRoborazziDebug` / `verifyRoborazziDebug` |
 | 测试分层 | JVM + Robolectric 39 类 / 481 例 | 分层相同；当前 4 类 / 6 例（P0 基线），**例数目标不少于 481** | `BuildSmokeTest`、`DatabaseSmokeTest`、`DesignGalleryTest`、`DesignGalleryScreenshotTest` |
 | 编译目标 | compileSdk 36 / targetSdk 36 | **compileSdk 37** / targetSdk 36 ✅（Compose 1.12.1 的硬要求，发现 F1） | `app/build.gradle.kts` |
-| 数据 | Room 2.8.5（`androidx.room`） | **Room 3.0.3（`androidx.room3`）** ✅ 验证门通过（内存库读写 + schema 导出） | `DatabaseSmokeTest`；`app/schemas/…/1.json` |
+| 数据 | Room 2.8.5（`androidx.room`） | **Room 3.0.3（`androidx.room3`）** ✅ 四表/三 DAO 已落地 | `DatabaseSmokeTest` 等 8 类 32 例；**导出的 schema 与参照逐字段一致**（F11）。⚠️ 3.x 把 `@TypeConverter/@TypeConverters` 改名为 `@ColumnTypeConverter/@ColumnTypeConverters`（F10） |
+| 照片管线 | `PhotoStore` + `PhotoReclaim`（1600/256/1024 三档） | 同档位同常量 ✅ 已落地 + 公开了三档常量供测试断言 | `PhotoStoreTest` 6 例；真机自检 `EXIF 800×400 → 400×800` ✅ |
+| 迁移策略 | `fallbackToDestructiveMigration(true)`（记 ⭐FR-DB-01 发布前必做） | **不写破坏性迁移** ✅（W2 提前修掉）：版本一升就必须交 `Migration` + 迁移测试 | `WheremyDatabase.kt` 的类注释写明了这条纪律 |
 | 导航 | 手写外壳 + `rememberSaveable` | **Navigation 3 1.2.0** ✅ 已落地（`NavDisplay` + `entryProvider` + 返回栈） | `ui/WheremyRoot.kt` |
 | DI | 手写 `AppContainer` | **Hilt 2.60.1 + KSP** ✅ 已落地（`@HiltAndroidApp` / `@HiltViewModel` / `@Provides`） | `WheremyApp.kt`、`di/AppModule.kt` |
 | 无障碍 | 🟡 芯片组与装饰件缺 description、焦点次序未梳理 | 全交互元素有语义、触控 ≥48dp、TalkBack 走查、200% 字缩放不破版 | |

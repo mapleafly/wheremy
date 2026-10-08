@@ -171,7 +171,8 @@ D:\src\dsh\wheremy\
 | F6 | `androidx.room3` **没有 `room3-ktx`**（ktx 已并入 runtime）；catalog 别名不能含 `class`（Gradle 保留字） | 依赖表已按实测调整 |
 | F7 | Compose 测试的 `createComposeRule` 已被 `androidx.compose.ui.test.junit4.v2.createComposeRule` 取代（构建给出弃用警告） | 已切到 v2（`StandardTestDispatcher` 语义），测试仍全绿 |
 | F8 | Nav3 的 `entry` 是 `EntryProviderScope` 的成员，**不需要 import** | 已修；`NavKey`/`entryProvider`/`NavDisplay` 三个 import 足够 |
-| F9 | 真机安装报 `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user` | **已查明真相**：不是开关没开——实测「USB安装」与「USB调试（安全设置）」**都是开着的**。真因是 MIUI 会弹一个 **「USB安装提示 · 正在通过USB安装此应用，是否继续？」**，「拒绝」带**3 秒倒计时**，`adb install` 期间没人点 → 自动拒绝并回这句错误。**破法**：后台发起安装 → 1.8 s 后 `input tap` 到「继续安装」按钮（本次坐标 `311 2188`，按钮 bounds 每次会变，应先 `uiautomator dump` 读 `bounds`）→ 安装 `Success`。**这条要进 `REBUILD.md` §7 D 组与真机验收清单** |
+| F10 | **Room 3 把类型转换注解改名了**：`androidx.room3` 里**根本没有** `@TypeConverter` / `@TypeConverters`，3.x 叫 **`@ColumnTypeConverter` / `@ColumnTypeConverters`**（另有 `ProvidedColumnTypeConverter`、`DaoReturnTypeConverter` 等新东西）；另外 3.x **没有 `room3-ktx`**（ktx 已并入 runtime）。错用旧名的表现是 KSP 报一句极其笼统的 `[MissingType]: Element 'X' references a type that is not present` | 已修（`Entities.kt` / `WheremyDatabase.kt` 注释里写明差别）。**教训**：选 3.x 前先把注解名逐个核实，别假设与 2.x 同名 |
+| F11 | **我们的 schema 与参照逐字段一致**（这是备份双向兼容的硬前提） | 用两边导出的 `1.json` 逐字段比对：4 张表、20/7/2/7 个字段的**列名/类型/非空/主键/外键/索引全部相同** ✅。以后任何 schema 改动都要重跑这次比对 |
 
 **规模（此刻）**：主源 8 个 Kotlin 文件 / 测试 4 个类 / 6 例；wrapper + CI + Spotless + 截图基线已就位。
 
@@ -325,7 +326,7 @@ D:\src\dsh\wheremy\
 | 阶段 | 状态 | 开始 | 结束 | 主要产出 | 出口判据（G0–G5 + 阶段判据） | 备注 |
 |---|---|---|---|---|---|---|
 | P0 工程与设计系统 | ✅ 完成 | 2026-10-08 | 2026-10-08 | 仓库骨架 + wrapper + CI 文件 + Spotless + 设计系统 token + DesignGallery + 截图基线（4 类 / 6 例）+ 真机冒烟 | 10 步全过（第 10 步晚补）；唯一未做的是 **CI 上真 GitHub 跑一次**（首次推送时验） | §3.4 有完整实测与 F1–F9 |
-| P1 数据与照片层 | ⬜ 未开始 | | | | 数据层测试全绿 + 中文检索命中 + EXIF 真机正确 | |
+| P1 数据与照片层 | 🟡 进行中（仅差仓库层） | 2026-10-08 | | 四表 + 三 DAO + 派生搜索列 + 照片三档 + EXIF 烤方向 + 引用计数回收 + 自检脚手架 | **8 类 / 32 例全绿**；**真机自检 7 项全绿**（中文命中、标签筛选、引用计数、EXIF 800×400→400×800）；schema 与参照逐字段一致（F11） | 仓库层（`ItemRepository`/`LocationRepository`）留到 P1 收尾或并入 P2 |
 | P2 录入闭环 | ⬜ 未开始 | | | | `RULES.md` §3/§5/§6 全部判据 | |
 | P3 查找闭环 | ⬜ 未开始 | | | | `UI.md` §2–§5 逐条 + 删除话术四档 | |
 | P4 位置树 | ⬜ 未开始 | | | | `RULES.md` §8 全部 + FR-LOC-05 入口 | |

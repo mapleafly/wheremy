@@ -5,6 +5,54 @@
 
 ---
 
+## 2026-10-08 · P1 数据与照片层 + 参照实现装进真机（截图对比基线就位）
+
+**触发**：用户拍板"开 P1"与"参照 APK 走复制源码到临时目录构建"。
+
+### 1. P1 数据与照片层（提交 `bd3b315`）
+
+| 交付 | 内容 |
+|---|---|
+| 四张表 | `location_node` / `item` / `item_photo` / `item_tag`，与参照**逐字段一致**（见下） |
+| 三个 DAO | `LocationDao` / `ItemDao`（含 `searchLike` 的 **LIMIT 300**、`inbox`、`moveTo` 时间戳同源、`itemIdsWithTag` 大小写不敏感）/ `PhotoDao`（含 `refsTo`、`otherOwnersOnPath`） |
+| 派生搜索列 | `SearchTextBuilder.FIELD_VERSION = 2`，拼接顺序照 `ARCHITECTURE.md` §4.4（**标签插在 aliases 与 description 之间**） |
+| 照片三档 | `PhotoStore`：bounds 采样解码 → **EXIF 七种方向烤进像素** → 1600/q85 原图 + 256/q80 缩略图 + 1024/q80 分析图（不落盘）；失败自清理 |
+| 引用计数回收 | `deleteUnreferencedPhotoFiles` 作为唯一规则；调用契约"先删自己的行再问"用测试钉住 |
+| 有意偏差（`DELTA.md` W2） | **不写 `fallbackToDestructiveMigration`**——版本一升就必须交 `Migration` + 迁移测试 |
+| 测试 | **8 类 / 32 例全绿**（判绿双证：freshXml 8/8、tests=32 failures=0 errors=0） |
+
+**F11（硬证据）**：把本实现与参照各自导出的 `app/schemas/…/1.json` 逐字段比对——**4 张表、20/7/2/7 个字段的列名/类型/非空/主键/外键/索引全部相同**。这是"旧备份包能导进新实现、新备份包也能导回参照"的前提。**以后每次改 schema 都要重跑这次比对。**
+
+**F10（选 3.x 的学费）**：Room 3 把类型转换注解改名成 `@ColumnTypeConverter` / `@ColumnTypeConverters`（`androidx.room3` 里根本没有 `TypeConverter`），且没有 `room3-ktx`；写错时的报错是**极其笼统**的 `[MissingType]: Element 'X' references a type that is not present`。已写进 `TECH_STACK.md` §8.10。
+
+**真机自检（P1 出口判据"EXIF 真机正确"）**：新增开发期脚手架 `DataSelfCheckScreen`（用独立 `selfcheck.db` + `cacheDir`，**不碰用户数据**，跑完清理），在 Xiaomi 13 / HyperOS 上跑真 Android 运行时，7 项全绿：
+
+```
+✅ 中文搜索命中「外套」：1 条（真机 SQLite）
+✅ 标签筛选命中（大小写不敏感）
+✅ 归位后不在待归类里
+✅ 引用计数：共用时 2 → 删一条后 1
+✅ EXIF 方向已烤进像素：800×400 存出来是 400×800
+✅ 缩略图长边 256 ≤ 256
+✅ 分析图只在内存里：400×800，2 KB
+```
+
+截图：`artifacts/screenshots/P1/device-selfcheck-portrait.png`。
+
+### 2. 参照实现装进真机（对比基线）
+
+- 源码**只读**复制到 `.reference/wheremy`（gitignore）→ 副本内用 PATH 上的 Gradle 8.14.3 构建（参照无 wrapper）→ `BUILD SUCCESSFUL`，APK **18,960,302 字节** → 装成 `com.wheremy.app`，与本实现的 `com.wheremy.app.dsh` **同机共存**。
+- 采到四张空态截图（`artifacts/screenshots/REF/`，每张配同名 `.xml` 原始 dump）：照片墙空态、待归类空态、设置页、位置页空态。逐屏文字见 `DELTA.md` §3。
+- **原目录零改动**：`git status --porcelain` 空、`log -1` 仍是 `ce6d343`，并以时间戳递归扫过原目录（排除 `.git`）无任何新写入。
+- 过程账：`artifacts/REF-build-report.md`；复用脚本：`artifacts/tools/{miui-install,capture,tap-text}.ps1`。
+- 顺带一条坑：**`adb exec-out screencap -p > file` 在 PowerShell 里可能把 PNG 当文本损坏**，改用 `adb shell screencap -p /sdcard/x.png` + `adb pull` 更稳。
+
+### 3. 阶段状态
+
+`PLAN.md` §10：**P0 ✅ 完成**、**P1 🟡 进行中（仅差仓库层 `ItemRepository`/`LocationRepository`）**。
+
+---
+
 ## 2026-10-08 · Phase 0 补测：真机验证通过（10/10 步完成）
 
 **触发**：用户完成手机端设置后要求继续真机相关工作。

@@ -335,3 +335,18 @@
 ③ Room 2.x/3.x 二选一做成 Phase 0 的**验证门**（先 spike，再定），不靠猜。
 
 **环境就绪度实测（本工作区，同日）**：JDK Temurin `21.0.8`；PATH 上 gradle `8.14.3`（version-fox，**新实现将自带 wrapper**）；Android SDK 平台 `android-29/34/35/36`、build-tools 到 `36.1.0`、`platform-tools/adb.exe` 在位；真机 `9aa4b43e` 在线；上面列的各依赖源全部可达。
+
+### 8.10 Room 3 落地实测（2026-10-08，Phase 0 验证门的结论）
+
+**结论：选 Room 3（`androidx.room3:room3-runtime` 3.0.3）**，四张表、三个 DAO、schema 导出、外键约束全部在真机与 Robolectric 上跑通。**但 3.x 不是 2.x 的改名版**，实测撞到两处差异：
+
+| 差异 | 2.x | 3.x（实测） |
+|---|---|---|
+| 类型转换注解 | `@TypeConverter` / `@TypeConverters` | **`@ColumnTypeConverter` / `@ColumnTypeConverters`**（`androidx.room3` 里**没有** `TypeConverter`）；另有新的 `ProvidedColumnTypeConverter`、`DaoReturnTypeConverter(s)` |
+| ktx 构件 | `androidx.room:room-ktx` | **没有 `room3-ktx`**（能力已并入 `room3-runtime`） |
+| 报错体验 | — | 写错注解名的报错极其笼统：`e: [ksp] [MissingType]: Element 'X' references a type that is not present` —— **看到这句先怀疑注解名/依赖名，不要去查 schema** |
+
+**另外两条实测事实**：
+
+1. **`compileSdk` 必须 ≥ 37**：Compose 1.12.1（BOM 2026.09.00）的 AAR 元数据硬要求，参照实现的 36 不够（`PLAN.md` §3.4 的 F1）。
+2. **备份兼容性可以机器校验**：两边各自导出的 `app/schemas/…/1.json` 可以逐字段比对（表、列名、类型、非空、主键、外键、索引）。本次比对结果**完全一致**，这是"旧备份包能导进新实现"的硬前提（`PLAN.md` §3.4 的 F11）。**以后每次改 schema 都要重跑这次比对。**
