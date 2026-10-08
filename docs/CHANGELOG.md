@@ -5,6 +5,34 @@
 
 ---
 
+## 2026-10-08 · Phase 0 开工：工具链落地与实测
+
+**触发**：用户拍板"立即执行 Phase 0"，并选定首版纳入 6 条 ⬜（`PLAN.md` §2.4 建议档）。
+
+**动作**：在本工作区（**不碰参照仓库**）从零搭出可运行、可测、可回归的工程骨架，并按 `PLAN.md` §3.3 的 10 步逐条验证。首个提交 `4628a9b`。
+
+**结论：现行代际组合可用，不需要回退阶梯的第 ②/③ 档。**
+
+| 结果 | 内容 |
+|---|---|
+| ✅ 9 步通过 | `assembleDebug`（APK 12.9 MB）、6 例测试（JVM + Robolectric + Room3）、Spotless、Hilt+KSP、Nav3 往返、Room 3 验证门、Roborazzi 两张 golden、wrapper + CI 文件 |
+| ⛔ 1 步阻塞 | 真机安装被 HyperOS 拦：`INSTALL_FAILED_USER_RESTRICTED` → **待用户开启「USB 调试（安全设置）/ 允许 USB 安装」**；在此之前真机项记 `⏳ 待验`，不算通过 |
+| ⏳ 未执行 | CI 只在本地写好，**未在真 GitHub 上跑过** |
+
+**实测发现 F1–F9（详见 `PLAN.md` §3.4）**，其中三条会改变后续开发：
+
+1. **F1（改变技术基线）**：Compose 1.12.1 要求 `compileSdk ≥ 37`，参照实现的 36 不够 → 本实现定 **compileSdk 37 / targetSdk 36**。这是"比参照新一档"的第一条硬证据。
+2. **F2（改变测试配置）**：Robolectric 4.17 在 JDK 17+ 必须加 `--add-opens`（`java.lang`/`java.util`/`java.io`/`jdk.internal.access`），否则所有 Robolectric 测试报 `Failed to interact with raw FileDescriptor internals`。
+3. **F3（改变静态检查配置）**：ktlint 的 `function-naming` 会误报 Compose 的 PascalCase 函数；且 Spotless 在临时目录跑 ktlint，根 `.editorconfig` 传不进去 → 用 `editorConfigOverride` 放行。
+
+其余：F4 本机 init 脚本（阿里云镜像）迫使 `RepositoriesMode.PREFER_SETTINGS`，同时把镜像显式写进 `settings.gradle.kts`；F5 AGP 9 需要 Gradle ≥ 9.1（本机 PATH 是 8.14.3）→ 必须先有 wrapper；F6 `androidx.room3` 没有 `room3-ktx`、catalog 别名不能含 `class`；F7 Compose 测试规则已换 `…junit4.v2.createComposeRule`；F8 Nav3 的 `entry` 不需要 import；F9 见上表阻塞项。
+
+**同步更新的文档**：`PLAN.md`（§3.1 技术基线表两处按实测修正、新增 §3.4 实测结果、§10 阶段记录表 P0 置 🟡）、`DELTA.md`（§4 工程对比 11 行从"目标"改成"现状 + 证据"）、`README.md`（文档地图已含 PLAN/DELTA）。
+
+**下一步**：① 用户开启真机安装权限后补第 10 步（顺带采集本实现首张真机截图）；② 进 P1（数据与照片层，`RULES.md` §2 四表 + 照片三档 + 引用计数）。
+
+---
+
 ## 2026-10-08 · 第三轮：联网复核 + 开发计划与差异台账
 
 **触发**：用户开通搜索（`DEEPSEEK_API_KEY`）后要求"用这个过程验证文档里的最佳实践"，并追问"能否进入开发阶段、先写代码还是先做 UI、后续总流程给建议"；同时明确三条边界：**参照仓库只读**、**在本工作区独立开发**、**最终与参照实现逐项对比**。

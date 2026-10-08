@@ -163,17 +163,18 @@
 
 | 项 | 参照实现 | 本实现目标 | 证据 |
 |---|---|---|---|
-| 构建入口 | PATH 上的 gradle，无 wrapper | **自带 wrapper**（官方 CI 前置） | |
-| CI | 无 | GitHub Actions：`test` + `ktlintCheck` + `lint`（Phase 0 就绿） | |
-| 静态检查 | 无 | Spotless 8.10.3 + ktlint 插件 14.2.0 + AGP Lint（不引 detekt） | |
-| 截图回归 | 无 | Roborazzi（浅/深 × 竖/横 × 关键状态） | |
-| 测试分层 | JVM + Robolectric 39 类 / 481 例 | 分层相同；**例数目标不少于 481**，新增 ⬜ 与 W 修复都要长测试 | |
+| 构建入口 | PATH 上的 gradle（8.14.3），无 wrapper | **自带 wrapper（9.8.1）** ✅ 已落地 | 首个提交 `4628a9b`；AGP 9 要求 Gradle ≥ 9.1，wrapper 是必需项（发现 F5） |
+| CI | 无 | GitHub Actions：`spotlessCheck` + `testDebugUnitTest`（⏳ 文件已写，**未在真 GitHub 跑过**） | `.github/workflows/ci.yml` |
+| 静态检查 | 无 | Spotless 8.10.3（内含 ktlint 1.4.0）✅ 已落地；**不引 detekt** | `:app:spotlessCheck` 通过；Compose 函数命名用 `editorConfigOverride` 放行（发现 F3） |
+| 截图回归 | 无 | Roborazzi 1.76.0 ✅ 已落地（当前 2 张：浅/深色画廊基线） | `app/build/outputs/roborazzi/design-gallery-{light,dark}.png`；`recordRoborazziDebug` / `verifyRoborazziDebug` |
+| 测试分层 | JVM + Robolectric 39 类 / 481 例 | 分层相同；当前 4 类 / 6 例（P0 基线），**例数目标不少于 481** | `BuildSmokeTest`、`DatabaseSmokeTest`、`DesignGalleryTest`、`DesignGalleryScreenshotTest` |
+| 编译目标 | compileSdk 36 / targetSdk 36 | **compileSdk 37** / targetSdk 36 ✅（Compose 1.12.1 的硬要求，发现 F1） | `app/build.gradle.kts` |
+| 数据 | Room 2.8.5（`androidx.room`） | **Room 3.0.3（`androidx.room3`）** ✅ 验证门通过（内存库读写 + schema 导出） | `DatabaseSmokeTest`；`app/schemas/…/1.json` |
+| 导航 | 手写外壳 + `rememberSaveable` | **Navigation 3 1.2.0** ✅ 已落地（`NavDisplay` + `entryProvider` + 返回栈） | `ui/WheremyRoot.kt` |
+| DI | 手写 `AppContainer` | **Hilt 2.60.1 + KSP** ✅ 已落地（`@HiltAndroidApp` / `@HiltViewModel` / `@Provides`） | `WheremyApp.kt`、`di/AppModule.kt` |
 | 无障碍 | 🟡 芯片组与装饰件缺 description、焦点次序未梳理 | 全交互元素有语义、触控 ≥48dp、TalkBack 走查、200% 字缩放不破版 | |
 | 自适应布局 | 锁竖屏（⛔FR-PRM-04） | 手机竖/横 + 平板，`NavigationSuiteScaffold` | |
-| 配色 | 固定青绿+琥珀；不做动态取色（⛔D4） | chrome 允许动态色，**照片墙保持中性固定色**（需 ADR） | |
-| DI | 手写 `AppContainer` | Hilt 2.60.1（官方推荐；命中官方判据） | |
-| 导航 | 手写外壳 + `rememberSaveable` | Navigation 3 1.2.0 + `SavedStateHandle` | |
-| 数据 | Room 2.8.5 | Room 3.0.3 或 2.8.5（Phase 0 验证门） | |
+| 配色 | 固定青绿+琥珀；不做动态取色（⛔D4） | chrome 允许动态色，**照片墙保持中性固定色**（需 ADR）；P0 已先把 token 集中到 `ui/theme/Theme.kt` | 见 PLAN §2.3 |
 | 文案资源 | 硬编码 Kotlin | `strings.xml`（T1）+ 文案对齐测试 | |
 | 备份格式 | 自造 zip（四表 JSON） | 保持同一格式（**旧包必须还能导入**），只加不改 | |
 

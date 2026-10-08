@@ -103,8 +103,8 @@
 | 图片 / 网络 / 序列化 | Coil 3.6.3 / OkHttp 5.5.0 + `mockwebserver3` / kotlinx.serialization 1.11.0 / coroutines 1.11.0 | — | OkHttp 5 的测试包名变了，import 要写对 |
 | 质量 | Spotless 8.10.3 + ktlint 插件 14.2.0 + AGP Lint | — | **不引 detekt**（2.x 仍 alpha，官方样板也不用） |
 | 测试 | JUnit 4.13.2 / Robolectric 4.17 / androidx.test:core 1.7.0 / coroutines-test 1.11.0 / Roborazzi 1.76.0 | — | JVM 为主；截图回归从 Phase 0 就接 |
-| CI | GitHub Actions：`checkout@v7` + `setup-java@v6` + `gradle/actions/setup-gradle@v6` | — | 第一天就要绿：`test` + `ktlintCheck` + `lint` |
-| SDK | compileSdk/targetSdk **36**、minSdk **26**、JVM target **17** | — | 与参照一致；`java.time` 在 26 上原生可用，**不要加 desugaring** |
+| CI | GitHub Actions：`checkout@v7` + `setup-java@v6` + `gradle/actions/setup-gradle@v6` | — | 第一天就要绿：`spotlessCheck` + `testDebugUnitTest`（`.github/workflows/ci.yml`，**尚未在真 GitHub 上跑过**） |
+| SDK | compileSdk **37**、targetSdk **36**、minSdk **26**、JVM target **17** | — | **实测修正**：Compose 1.12.1 的 AAR 元数据要求 compileSdk ≥ 37（详见 §3.3 实测结果 F1）；targetSdk 保持 36；`java.time` 在 26 上原生可用，**不要加 desugaring** |
 | 应用 id | `com.wheremy.app` + debug 变体后缀 **`.dsh`** | — | 让"参照包"与"本实现包"能在同一台真机并存、同屏对比（§6.2） |
 
 ### 3.2 仓库布局（本工作区）
@@ -141,6 +141,39 @@ D:\src\dsh\wheremy\
 **回退阶梯（每一档都要在 Phase 0 内出结论并写回本文）**：
 ① `AGP 9.4.1 + Kotlin 2.4.20 + KSP 2.3.12` → ② 只退 Kotlin（2.3.x / AGP 9.3.x） → ③ 退到参照组合（AGP 8.13.2 / Gradle 8.14.3 / Kotlin 2.2.21，已证实可用）。
 **判定原则**：宁可退一档也不要在一个周末里跟工具链打架；退档必须写 ADR（`DECISIONS.md`），写清"为什么退、什么时候再进"。
+
+### 3.4 实测结果（2026-10-08，第 ① 档全部通过）
+
+**结论：现行代际组合可用，不需要回退。** 10 步验证的实况：
+
+| # | 步骤 | 结果 | 证据 |
+|---|---|---|---|
+| 1 | `git init` + `.gitignore` + `.editorconfig` | ✅ | 首个提交 `4628a9b` |
+| 2 | `./gradlew :app:assembleDebug` | ✅ | `BUILD SUCCESSFUL`；APK 12.9 MB |
+| 3 | 第一条 JVM 测试 | ✅ | `BuildSmokeTest` |
+| 4 | Spotless（ktlint）`check` | ✅ | `:app:spotlessCheck` 通过 |
+| 5 | Hilt 装配 + KSP | ✅ | `@HiltAndroidApp` + `@HiltViewModel` + `@Provides`；`hiltJavaCompileDebug` 执行 |
+| 6 | Nav3 往返（两个目的地 + 返回栈） | ✅ | `NavDisplay` + `entryProvider`；返回键走 `onBack` |
+| 7 | **Room 3 验证门** | ✅ **选 Room 3** | `androidx.room3:room3-runtime 3.0.3` + `room3-compiler`(KSP)：内存库读写通过；schema 已导出 `app/schemas/…/1.json` |
+| 8 | Roborazzi golden | ✅ | `design-gallery-light.png` / `design-gallery-dark.png`（411×891，实图已人工看过） |
+| 9 | CI | ⏳ 文件已写，**未在真 GitHub 上执行** | `.github/workflows/ci.yml` |
+| 10 | 真机安装（`9aa4b43e`） | ⛔ **被 HyperOS 拦** | `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user` —— 需在手机上开启「USB 调试（安全设置）/ 允许 USB 安装」；参照实现把这个坑记在 `REBUILD.md` §7 D4 |
+
+**实测发现（全部已解决或已入档）**：
+
+| # | 发现 | 处理 |
+|---|---|---|
+| F1 | **Compose 1.12.1（BOM 2026.09.00）要求 `compileSdk ≥ 37`**，而参照实现的 36 不够 | `compileSdk = 37`（AGP 自动补装平台，SDK license 已接受）；targetSdk 仍 36。**这是"本实现比参照新一档"的直接证据** |
+| F2 | **Robolectric 4.17 在 JDK 17+ 需要模块开放**，否则所有 Robolectric 测试报 `Failed to interact with raw FileDescriptor internals` | `testOptions.unitTests.all { jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED", …/java.util, …/java.io, …/jdk.internal.access) }` |
+| F3 | Compose 的 `@Composable` 函数用 PascalCase，**ktlint 的 `function-naming` 会误报**；且根 `.editorconfig` 传不进 Spotless 的临时目录 | Spotless 里用 `editorConfigOverride(mapOf("ktlint_function_naming_ignore_when_annotated_with" to "Composable"))` |
+| F4 | 本机有组织级 Gradle init 脚本（注入阿里云镜像），官方推荐的 `FAIL_ON_PROJECT_REPOS` 会**直接构建失败** | 改 `PREFER_SETTINGS`；同时把阿里云镜像**显式写进 `settings.gradle.kts`**（仓库自包含，换机/CI 自动回落官方源） |
+| F5 | AGP 9 需要 Gradle ≥ 9.1，而本机 PATH 上是 8.14.3 → `NoClassDefFoundError: ProjectTypeBinding` | 用临时下载的 Gradle 9.8.1 生成 wrapper，此后一切走 `./gradlew`（这正是"提交 wrapper"的价值） |
+| F6 | `androidx.room3` **没有 `room3-ktx`**（ktx 已并入 runtime）；catalog 别名不能含 `class`（Gradle 保留字） | 依赖表已按实测调整 |
+| F7 | Compose 测试的 `createComposeRule` 已被 `androidx.compose.ui.test.junit4.v2.createComposeRule` 取代（构建给出弃用警告） | 已切到 v2（`StandardTestDispatcher` 语义），测试仍全绿 |
+| F8 | Nav3 的 `entry` 是 `EntryProviderScope` 的成员，**不需要 import** | 已修；`NavKey`/`entryProvider`/`NavDisplay` 三个 import 足够 |
+| F9 | 真机安装被 HyperOS 拦（见上表第 10 步） | **待用户开启开关**；在此之前真机项一律记 `⏳ 待验`，不算通过 |
+
+**规模（此刻）**：主源 8 个 Kotlin 文件 / 测试 4 个类 / 6 例；wrapper + CI + Spotless + 截图基线已就位。
 
 ---
 
@@ -291,7 +324,7 @@ D:\src\dsh\wheremy\
 
 | 阶段 | 状态 | 开始 | 结束 | 主要产出 | 出口判据（G0–G5 + 阶段判据） | 备注 |
 |---|---|---|---|---|---|---|
-| P0 工程与设计系统 | ⬜ 未开始 | | | | spike 10 步全过 + CI 绿 + 空壳真机不崩 | |
+| P0 工程与设计系统 | 🟡 进行中（仅差真机一项） | 2026-10-08 | | 仓库骨架 + wrapper + CI 文件 + Spotless + 设计系统 token + DesignGallery + 截图基线（4 类 / 6 例） | 9 步过、第 10 步（真机安装）被 HyperOS 拦 → **待用户开启「USB 安装」后补验**；CI 未在真 GitHub 跑过 | §3.4 有完整实测与 F1–F9 发现 |
 | P1 数据与照片层 | ⬜ 未开始 | | | | 数据层测试全绿 + 中文检索命中 + EXIF 真机正确 | |
 | P2 录入闭环 | ⬜ 未开始 | | | | `RULES.md` §3/§5/§6 全部判据 | |
 | P3 查找闭环 | ⬜ 未开始 | | | | `UI.md` §2–§5 逐条 + 删除话术四档 | |
