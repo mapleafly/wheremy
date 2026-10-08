@@ -22,6 +22,9 @@ release/
 # 本工作区的产物（截图、导出、dump 等，一律不进 git）
 artifacts/
 
+# 参照实现的只读副本（只在本地构建参照 APK 用，绝不提交、绝不回写原目录）
+.reference/
+
 # 凭据：绝不提交
 app/secrets.json
 secrets.properties
