@@ -41,6 +41,11 @@ import com.wheremy.app.data.db.PhotoOwner
 import com.wheremy.app.data.db.SearchTextBuilder
 import com.wheremy.app.data.db.WheremyDatabase
 import com.wheremy.app.data.photos.PhotoStore
+import com.wheremy.app.data.repo.ItemRepository
+import com.wheremy.app.data.repo.LocationRepository
+import com.wheremy.app.domain.CaptureFlow
+import com.wheremy.app.ui.review.ReviewUiState
+import com.wheremy.app.ui.review.ReviewViewModel
 import com.wheremy.app.ui.theme.WheremySpacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -101,6 +106,8 @@ fun DataSelfCheckScreen(onBack: () -> Unit) {
 private suspend fun runDataSelfCheck(context: Context): List<String> = withContext(Dispatchers.IO) {
     val out = mutableListOf<String>()
     val now = System.currentTimeMillis()
+
+    out += runP2SelfCheck(context)
 
     // —— ① 真机 SQLite：中文搜索 / 标签筛选 / 引用计数（用独立库文件，跑完删掉）——
     val selfCheckDbFile = context.getDatabasePath("selfcheck.db")
@@ -240,6 +247,116 @@ private suspend fun runDataSelfCheck(context: Context): List<String> = withConte
 
     out += "— 以上全部在真机上跑完，用户数据未被触碰（独立库 + cacheDir，已清理）"
     out
+}
+
+/**
+ * P2 闭环自检（**用合成照片，不碰相册里的私人照片**）：
+ * 选图落库 → 确认页状态机 → 保存/稍后处理 → 待归类 → 空壳回收，全部在真机运行时上跑。
+ * 用独立库与 `cacheDir`，跑完把行与文件都清掉。
+ */
+private suspend fun runP2SelfCheck(context: Context): List<String> {
+    val out = mutableListOf<String>()
+    val dbFile = context.getDatabasePath("selfcheck-p2.db")
+    val db = Room.databaseBuilder(context, WheremyDatabase::class.java, "selfcheck-p2.db").build()
+    val store = PhotoStore(File(context.cacheDir, "selfcheck-p2-photos"))
+    val items = ItemRepository(db, store)
+    val locations = LocationRepository(db, store)
+    val flow = CaptureFlow(items)
+
+    try {
+        // ① 选图那一刻就落库
+        val itemId = flow.capture(jpegWithOrientation(800, 400, ExifInterface.ORIENTATION_NORMAL)) {}.itemId
+        val stored = items.get(itemId)
+        val photos = items.photosOf(itemId)
+        out += if (stored != null && stored.status == ItemStatus.DRAFT && photos.size == 1) {
+            "✅ 选图即落库：DRAFT + 照片行（${photos.single().thumbPath}）"
+        } else {
+            "❌ 选图没落库：item=${stored?.status} photos=${photos.size}"
+        }
+        out += if (items.inbox().any { it.id == itemId }) "✅ 未保存的件出现在待归类" else "❌ 待归类里没有它"
+
+        // ② 确认页状态机：改名 → 保存
+        val vm = ReviewViewModel(items, locations, flow)
+        vm.start(itemId)
+        awaitState(vm) { it.current != null }
+        val canSaveBefore = vm.state.value.canSave
+        vm.setName("自检电钻")
+        vm.setQuantity(2)
+        vm.save()
+        awaitState(vm) { it.finished }
+        val confirmed = items.get(itemId)
+        out += if (canSaveBefore && confirmed?.status == ItemStatus.CONFIRMED && confirmed.name == "自检电钻") {
+            "✅ 确认页保存：DRAFT → CONFIRMED，名称与数量写进去了（searchText=${confirmed.searchText.take(20)}）"
+        } else {
+            "❌ 保存没生效：status=${confirmed?.status} name=${confirmed?.name}"
+        }
+        // 确认 ≠ 已归位：没选位置时它仍在待归类（谓词是「没位置 或 还是草稿」）
+        out += if (items.inbox().any { it.id == itemId }) {
+            "✅ 确认但没选位置：仍在待归类（确认 ≠ 已归位）"
+        } else {
+            "❌ 没选位置却离开了待归类：谓词写错了"
+        }
+
+        // 选了位置再确认，这才该离开待归类
+        val home = locations.add(parentId = null, name = "自检家", kind = "房间")
+        val placedId = flow.capture(jpegWithOrientation(700, 350, ExifInterface.ORIENTATION_NORMAL)) {}.itemId
+        val vmPlaced = ReviewViewModel(items, locations, flow)
+        vmPlaced.start(placedId)
+        awaitState(vmPlaced) { it.current != null }
+        vmPlaced.setName("自检电钻二号")
+        vmPlaced.setLocation(home)
+        vmPlaced.save()
+        awaitState(vmPlaced) { it.finished }
+        val placed = items.get(placedId)
+        out += if (placed?.status == ItemStatus.CONFIRMED && items.inbox().none { it.id == placedId }) {
+            "✅ 选了位置再确认：离开待归类（${items.summaries(listOf(placed)).single().locationPath}）"
+        } else {
+            "❌ 归位后仍在待归类：status=${placed?.status} location=${placed?.locationId}"
+        }
+
+        // ③ 稍后处理：写字段但留在待归类
+        val laterId = flow.capture(jpegWithOrientation(600, 300, ExifInterface.ORIENTATION_NORMAL)) {}.itemId
+        val vm2 = ReviewViewModel(items, locations, flow)
+        vm2.start(laterId)
+        awaitState(vm2) { it.current != null }
+        vm2.setName("自检护照")
+        vm2.keepForLater()
+        awaitState(vm2) { it.finished }
+        val later = items.get(laterId)
+        out +=
+            if (later?.status == ItemStatus.DRAFT && later.name == "自检护照" && items.inbox().any { it.id == laterId }) {
+                "✅ 稍后处理：字段写了、状态还是 DRAFT、留在待归类"
+            } else {
+                "❌ 稍后处理不对：status=${later?.status} name=${later?.name}"
+            }
+
+        // ④ 空壳回收：什么都没动就退出 → 行与文件都不留
+        val shellId = flow.capture(jpegWithOrientation(500, 500, ExifInterface.ORIENTATION_NORMAL)) {}.itemId
+        val shellPath = items.photosOf(shellId).single().filePath
+        val vm3 = ReviewViewModel(items, locations, flow)
+        vm3.start(shellId)
+        awaitState(vm3) { it.current != null }
+        vm3.requestExit()
+        awaitState(vm3) { it.finished }
+        out += if (items.get(shellId) == null && !store.file(shellPath).exists()) {
+            "✅ 空壳回收：行与照片文件都清掉了（引用计数那条规则）"
+        } else {
+            "❌ 空壳没清干净：行=${items.get(shellId) != null} 文件=${store.file(shellPath).exists()}"
+        }
+    } finally {
+        db.close()
+        dbFile.delete()
+        File(context.cacheDir, "selfcheck-p2-photos").deleteRecursively()
+    }
+    return out
+}
+
+/** 等 VM 的异步动作落地（真机上 Room 的查询在别的线程上完成）。 */
+private suspend fun awaitState(vm: ReviewViewModel, predicate: (ReviewUiState) -> Boolean) {
+    repeat(200) {
+        if (predicate(vm.state.value)) return
+        kotlinx.coroutines.delay(25)
+    }
 }
 
 /** 造一张带方向标签的 JPEG：左半边涂红，方便人眼分辨朝向。 */

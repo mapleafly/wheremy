@@ -9,11 +9,20 @@ import androidx.navigation3.ui.NavDisplay
 import com.wheremy.app.ui.debug.DataSelfCheckScreen
 import com.wheremy.app.ui.design.DesignGalleryScreen
 import com.wheremy.app.ui.home.HomeScreen
+import com.wheremy.app.ui.inbox.InboxScreen
+import com.wheremy.app.ui.review.ReviewScreen
 import kotlinx.serialization.Serializable
 
-/** 目的地键（Nav3 要求 @Serializable）。P0/P1 只有三屏，P2 起逐步补齐产品屏。 */
+/** 目的地键（Nav3 要求 @Serializable）。 */
 @Serializable
 data object HomeKey : NavKey
+
+/** 确认页带参数：要确认的那一件的 id。 */
+@Serializable
+data class ReviewKey(val itemId: String) : NavKey
+
+@Serializable
+data object InboxKey : NavKey
 
 @Serializable
 data object DesignGalleryKey : NavKey
@@ -35,6 +44,18 @@ fun WheremyRoot(greeting: String) {
                     greeting = greeting,
                     onOpenDesignGallery = { backStack.add(DesignGalleryKey) },
                     onOpenDataSelfCheck = { backStack.add(DataSelfCheckKey) },
+                    onOpenInbox = { backStack.add(InboxKey) },
+                    onOpenReview = { itemId -> backStack.add(ReviewKey(itemId)) },
+                )
+            }
+            entry<ReviewKey> {
+                // 这一屏自己不碰导航栈：只把"办完了"写进 finished，怎么落地由外壳决定
+                ReviewScreen(onDone = { backStack.removeLastOrNull() })
+            }
+            entry<InboxKey> {
+                InboxScreen(
+                    onBack = { backStack.removeLastOrNull() },
+                    onOpenItem = { itemId -> backStack.add(ReviewKey(itemId)) },
                 )
             }
             entry<DesignGalleryKey> {

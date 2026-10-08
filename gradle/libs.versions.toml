@@ -7,6 +7,7 @@ ksp = "2.3.12"
 # UI
 composeBom = "2026.09.00"
 activityCompose = "1.13.0"
+lifecycle = "2.11.0"
 navigation3 = "1.2.0"
 
 # 装配与数据
@@ -46,6 +47,7 @@ androidx-compose-material3-window-size = { group = "androidx.compose.material3",
 androidx-compose-material3-adaptive-navigation-suite = { group = "androidx.compose.material3", name = "material3-adaptive-navigation-suite" }
 androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
 
 # 导航（Nav3）
 androidx-navigation3-runtime = { group = "androidx.navigation3", name = "navigation3-runtime", version.ref = "navigation3" }

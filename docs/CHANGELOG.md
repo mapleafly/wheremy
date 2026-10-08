@@ -5,6 +5,45 @@
 
 ---
 
+## 2026-10-09 · P2 录入闭环（单件闭环已通）
+
+**触发**：用户"按建议执行，没有需要拍板的地方就自动进行下去"。
+
+**交付**：
+
+| 文件 | 内容 |
+|---|---|
+| `domain/CaptureFlow.kt` | `capture(jpeg, onDraftSaved)`：**先落库**，回调里立刻给出真实 `itemId`（「稍后处理」的前提）；`replacePhoto` 走三步顺序。AI 分析留出接缝（P3 接，`analyzing` 恒 false） |
+| `ui/capture/CaptureViewModel.kt` | 选图入口：照片一到就落库 |
+| `ui/review/ReviewUiState.kt` | `ReviewSlot`（含 `isThrowawayShell`）+ 四本账（`notStored`/`leftBehind`/`alreadySaved`/`unsaved`）+ `canSave` |
+| `ui/review/ReviewViewModel.kt` | 13 个字段编辑（都记 `touched`）、`save`/`keepForLater`/`discardCurrent`/`requestExit`/`cancelExit`/`exitWithoutSaving`/`exitKeepingEdits`/`closeWithoutAsking`、`consumeFinished` |
+| `ui/review/ReviewScreen.kt` | 顶栏三颗（✕/稍后处理/保存这一件）、多件芯片排（`chipLabel` 带「● 」）、照片区（180dp / Fit / 「换一张」与「选择照片」两支）、AI 状态行（三句位置话 + 分析中那句）、**13 个字段按次序**、位置选择框、到期框（UTC→本地零点换算）、**退出框两支逐字文案** |
+| `ui/inbox/InboxScreen.kt` + VM | 待归类列表与空态「没有待归类的物品，全都放好了。」（逐字） |
+| `di/DataModule.kt` | Hilt 装配：DB / PhotoStore（`files/photos`）/ 两个仓库 / CaptureFlow |
+| 外壳 | Nav3 增加 `ReviewKey(itemId)` 与 `InboxKey`；Home 变成 P2 入口（选一张照片 / 待归类 / 两个开发期脚手架） |
+
+**判绿双证**：**14 类 / 85 例**、`freshXml=14/14`、`failures=0 errors=0`、Spotless 通过。
+
+**真机自检 10 项全绿**（`artifacts/screenshots/P2/device-selfcheck-p2.png`，**用合成照片，不碰相册里的私人照片**）：
+
+```
+✅ 选图即落库：DRAFT + 照片行      ✅ 未保存的件出现在待归类
+✅ 确认页保存：DRAFT → CONFIRMED   ✅ 确认但没选位置：仍在待归类（确认 ≠ 已归位）
+✅ 选了位置再确认：离开待归类      ✅ 稍后处理：字段写了、状态还是 DRAFT、留在待归类
+✅ 空壳回收：行与照片文件都清掉了  ✅（P1 四项：中文搜索/标签筛选/待归类谓词/引用计数）
+```
+另：选图器验证——点「选一张照片」拉起 `com.android.photopicker`，返回后回到本应用，**无崩溃**，且未选中任何私人照片。
+
+**三条新发现（`PLAN.md` §3.4 F16/F17）**：
+
+1. **F16「确认 ≠ 已归位」**：待归类的谓词是 `locationId IS NULL OR status = 'DRAFT'`，所以**确认了但没选位置**的物品仍在待归类——把它搬出去的动作是"选位置"，不是"保存"。这条是我在真机自检里判反了、被自检自己抓出来的（已改成两条断言）。
+2. **F17 确认页的协程测试不能用虚拟时间的 `runTest`**：VM 在 `viewModelScope`（Main）而 Room 的挂起查询在别的线程完成，`runTest` 会提前结束；改成 `Unconfined` + 轮询等待。另有一条"用名字等待会匹配到旧槽位"的竞态。
+3. 测试基础设施的这条规矩要沿用到后面所有 VM 测试（`TESTING.md` 的补充项）。
+
+**阶段状态**：`PLAN.md` §10 → **P0 ✅、P1 ✅、P2 🟡**（多件录入、详情页/删除/搬移按切片留给 P2b/P3；AI 分析在 P3）。
+
+---
+
 ## 2026-10-09 · P1 收尾：仓库层与领域层（P1 关单）
 
 **触发**：用户"按建议执行，没有需要拍板的地方就自动进行下去"。
