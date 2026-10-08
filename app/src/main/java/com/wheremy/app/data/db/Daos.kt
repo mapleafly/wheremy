@@ -47,8 +47,18 @@ interface ItemDao {
     @Query("DELETE FROM item")
     suspend fun deleteAll()
 
+    @Query("SELECT * FROM item WHERE id = :id")
+    suspend fun byId(id: String): ItemEntity?
+
+    /** 全量（照片墙在空 query 时走这条）。 */
+    @Query("SELECT * FROM item ORDER BY updatedAt DESC")
+    suspend fun all(): List<ItemEntity>
+
     @Delete
     suspend fun delete(item: ItemEntity)
+
+    @Query("DELETE FROM item WHERE id = :id")
+    suspend fun deleteById(id: String)
 
     // —— 标签：整批替换（先 clear 再 insert），所以这里不给单条 update ——
 
