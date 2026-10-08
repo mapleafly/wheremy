@@ -273,6 +273,7 @@ grep -ho 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' \
 | D4 | 系统相机/相册的弹窗属于别的包，点「继续安装」要先 `KEYCODE_HOME` | 现在多数时候 `install -r` 直接 Success，被拦才走文件管理；不要为拦包写复杂脚本 |
 | D5 | ~~androidx `FileProvider.getUriForFile` 在 Windows（含 Robolectric）必抛~~ **历史坑，现在不适用**：`app/` 里 grep `FileProvider` / `getUriForFile` / `file_paths` **零命中**，相机走应用内 CameraX + 文件路径，不产 content URI（当年的工具类与清单 `<provider>` 已删，见 `docs/superpowers/plans/2026-10-02-wheremy-core-loop.md`） | 别再为它写绕过断言。**但要记住它为什么存在**：一旦要跨应用共享文件（分享图片、导出单张照片），这条坑立刻复活——那时先按 `PROCESS.md` §3.7 评估 |
 | D6 | 取景屏"黑"有三种因：没绑上 / 没画出来 / 拍到的就是黑图 | 截图分不出后两种。把快门那张 JPEG 从 `files/photos/originals` 取回亲眼看，再看 AI 留痕里模型怎么说 |
+| D7 | `adb install` 报 `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`，**看着像"USB 安装权限没开"，其实不是**（2026-10-08 实测） | 真因是 MIUI 的 **「USB安装提示 · 正在通过USB安装此应用，是否继续？」**弹窗：「拒绝」带 **3 秒倒计时**，`adb install` 期间无人点 → 自动拒绝并回这句错误。**先读开关状态再下结论**：`uiautomator dump` 读「USB安装」与「USB调试（安全设置）」两项的 `checked`，实测两者本来就都是 `true`。**破法**：后台起 `adb install` → 等约 1.8 s → dump 读「继续安装」按钮 `bounds` → `input tap` 中点 → 结果 `Success`（本次实测按钮 bounds `[99,2119][523,2257]`，**坐标随版本/语言会变，每次都要现读**；`pm install` 与 `install-create/write/commit` 三条路都会被同一个弹窗拦，绕不过去） |
 
 ### E 组：数据与清理
 

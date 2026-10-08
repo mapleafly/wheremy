@@ -5,6 +5,34 @@
 
 ---
 
+## 2026-10-08 · Phase 0 补测：真机验证通过（10/10 步完成）
+
+**触发**：用户完成手机端设置后要求继续真机相关工作。
+
+**结论：Phase 0 十步全部通过，P0 可以关单**（唯一遗留是 CI 还没在真 GitHub 上跑过一次，留待首次推送）。
+
+**最大的一条：F9 的真相被查明，且与原先的判断完全不同。**
+装包一直报 `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`，看着像"USB 安装权限没开"。实际用 `uiautomator dump` 一读：**「USB安装」与「USB调试（安全设置）」两个开关本来就是 `checked=true`**。真因是 MIUI 会弹一个 **「USB安装提示 · 正在通过USB安装此应用，是否继续？」**，而「拒绝」带 **3 秒倒计时**——`adb install` 期间没有人在手机上点，于是自动拒绝并回那句"canceled by user"。
+**破法**：后台起安装 → 约 1.8 s 后 dump 出「继续安装」按钮的实时 `bounds` → `input tap` 其中点 → `Success`。
+（`pm install`、`install-create/write/commit` 三条路都被同一个弹窗拦，绕不过去。）已写成 `REBUILD.md` §7 **D7**，供真机验收清单复用。
+
+**真机证据（Xiaomi 13 / HyperOS V816 / `1080×2400 @440dpi`）**：
+
+| 项 | 结果 |
+|---|---|
+| 安装 | `Success`（`pm path com.wheremy.app.dsh` 可查到） |
+| 启动 | 冷启动 `TotalTime 569 ms`（竖屏）/ `619 ms`（横屏），`Status: ok` |
+| 存活 | `topResumedActivity` = 本应用；`pidof` 有进程；`logcat -b crash` **为空** |
+| 导航 | 点「看设计系统」进入画廊；**返回键回到上一屏且进程不退**（Nav3 `onBack` 生效） |
+| 截图 | 真机 4 张（Home/画廊 × 竖/横）+ Roborazzi golden 2 张，均落在 `artifacts/screenshots/P0/`（不进 git） |
+| 附带发现 | 本实现**不锁竖屏**（参照实现锁竖屏 ⛔FR-PRM-04）：横屏能正常渲染，但布局尚未自适应 → 留给 P6 的自适应项 |
+
+**同步更新的文档**：`PLAN.md`（§3.4 第 10 步改 ✅、F9 改写成查明真相的破法、§10 P0 置 ✅）、`DELTA.md`（§3 补环境快照与 P0 两行截图对比）、`REBUILD.md`（新增 §7 D 组 D7 真机坑）。
+
+**下一步**：进 **P1（数据与照片层）**——按 `RULES.md` §2 建四张表、照片三档（原图/缩略图/派生）、引用计数回收、EXIF 烤平、派生搜索列；出口判据在 `PLAN.md` §5。
+
+---
+
 ## 2026-10-08 · Phase 0 开工：工具链落地与实测
 
 **触发**：用户拍板"立即执行 Phase 0"，并选定首版纳入 6 条 ⬜（`PLAN.md` §2.4 建议档）。
