@@ -1,0 +1,28 @@
+# Gradle / Kotlin
+.gradle/
+build/
+*/build/
+.kotlin/
+out/
+
+# Android
+local.properties
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+.cxx/
+release/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# 本工作区的产物（截图、导出、dump 等，一律不进 git）
+artifacts/
+
+# 凭据：绝不提交
+app/secrets.json
+secrets.properties
+*.jks

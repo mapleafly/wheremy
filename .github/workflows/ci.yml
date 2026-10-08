@@ -1,0 +1,44 @@
+name: CI
+
+# 门禁 G0–G3 的机器化版本（PROCESS.md §6 / PLAN.md §3.3 第 9 步）。
+# 注意：本文件尚未在真实 GitHub 上跑过——首个 PR 跑通后再把结果记进 PLAN.md §3.3。
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 检出
+        uses: actions/checkout@v7
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: 准备 Gradle（含缓存）
+        uses: gradle/actions/setup-gradle@v6
+
+      # 依赖源：仓库里配了阿里云镜像在前、google()/mavenCentral() 兜底（settings.gradle.kts），
+      # 海外 runner 上镜像不通时会自动回落到官方源。
+      - name: 静态检查（Spotless/ktlint）
+        run: ./gradlew :app:spotlessCheck --console=plain
+
+      - name: 单元测试（JVM + Robolectric）
+        run: ./gradlew :app:testDebugUnitTest --console=plain
+
+      - name: 上传测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            app/build/reports/tests/**
+            app/build/test-results/**

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 界面本身用 Compose 的 M3 主题；这里只给系统窗口一个不刺眼的底（同参照实现的做法） -->
+    <style name="Theme.Wheremy" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>

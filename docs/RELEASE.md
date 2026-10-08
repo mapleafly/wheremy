@@ -1,0 +1,379 @@
+# Wheremy 发布文档（RELEASE）
+
+**这份文档回答**：把一个包交到用户手上之前必须做完哪几件事、每件事留下什么证据、出错了怎么退回来。
+**读者**：软件经理 / 发布负责人（`README.md` §1 那张表里"发布 / 运维"一行）。一人多角是常态，但**每一件签收都要落到名字**。
+**代码基线**：commit `cf73f5b`（2026-10-06）。主源 57 个 Kotlin 文件 / 6881 行；测试 39 个结果类 / 481 例全绿。
+**不回答**：日常怎么开发（→`DEVELOPMENT.md`）、测试怎么写（→`TESTING.md`）、一次改动走哪条通道（→`PROCESS.md`）、每条规则怎么算（→`RULES.md`）、从零重建的顺序（→`REBUILD.md`）。
+
+---
+
+## 1. 这份文档管什么 / 不管什么
+
+| 本文管 | 展开在 | 本文不管 → 去 |
+|---|---|---|
+| 版本号怎么涨；`versionCode` / `DB_SCHEMA_VERSION` / 备份包 `schemaVersion` 的关系 | §2 | 环境怎么搭、编码纪律、扩展点 → `DEVELOPMENT.md` |
+| 发布前必做（⭐）——为什么必须、怎么算做完、谁签收 | §3 | 测试分层、判绿双证、变异验牙、缺陷分级 → `TESTING.md` |
+| 发布门禁 G0–G5 在发布场景下要交什么证据 | §4 | 一次改动走哪条通道、文档同步矩阵 → `PROCESS.md` §3 / §5 |
+| schema 升级、备份包兼容、降级、导出-升级-导入 | §5 | 每条规则的值与逐字文案 → `RULES.md` |
+| 怎么出包、怎么装上去、什么绝不许进包 | §6 | 里程碑、风险登记、迭代节奏 → `PROJECT.md` |
+| 出事后哪些能退、哪些退不了、先做什么 | §7 | 从零重建的顺序与不可变项 → `REBUILD.md` |
+| 发布记录写在哪、用户反馈怎么变成缺陷 | §8 | 单条缺陷怎么修、走哪条通道 → `PROCESS.md` §3.2 |
+| 一份照着打勾就能发的清单 | §9 | 打了勾之后的排期与迭代节奏 → `PROJECT.md` |
+
+**边界一句话**：本文只写"交付那一刻要发生什么"，不写"交付之前每一天怎么写代码"。
+
+---
+
+## 2. 发布物与版本策略
+
+### 2.1 现在的事实
+
+| 项 | 值 | 出处 |
+|---|---|---|
+| `applicationId` | `com.wheremy.app` | `app/build.gradle.kts:14` |
+| `versionName` / `versionCode` | `"0.1.0"` / `1` | `app/build.gradle.kts:18,17` |
+| `compileSdk` / `minSdk` / `targetSdk` | 36 / 26 / 36 | `app/build.gradle.kts:11,15,16` |
+| Java 与 `jvmTarget` | 都是 17 | `app/build.gradle.kts:25-26,42` |
+| release 变体 | 只有 `isMinifyEnabled = false`，**没有 `signingConfig`** | `app/build.gradle.kts:21-23` |
+| `allowBackup` | `"false"` 🔒 | `AndroidManifest.xml:13` |
+| 权限 | 只有 `INTERNET` / `POST_NOTIFICATIONS` / `CAMERA`，**没有任何存储权限** | `AndroidManifest.xml:3-6` |
+| DB schema 号 | `DB_SCHEMA_VERSION = 1`，`exportSchema = true`（基线 `app/schemas/…/1.json` 已进 git） | `WheremyDatabase.kt:16,21` |
+| 构建入口 | 命令行 gradle，**仓库里没有 wrapper** | `REBUILD.md` §8 第 1 条 |
+| 分发方式 | 侧载 APK | `PRD.md` §5 ⭐FR-RLS-01 |
+
+**没有 release 签名 ⇒ 现在能侧载出去的只有 debug 包。** 这不是推断：`gradle :app:signingReport` 今天对 release 变体打印的是 `Config: null`、`Store: null`、`Alias: null`（本机实跑）。这也正是 ⭐FR-RLS-01 的全部内容（`PRD.md` §5，触发条件写着"侧载给别人用时"）。
+
+### 2.2 版本号规则
+
+| 号 | 怎么涨 | 记在哪 |
+|---|---|---|
+| `versionName` | 语义化 `主.次.修`：现在 `0.1.0`；第一次带签名交付进次位，只有修缺陷才动修订位 | `app/build.gradle.kts` 的 `defaultConfig` |
+| `versionCode` | **每次出包 +1，只增不减**；同一天出两个包也要 +1 | 同上；另在仓库根 `CHANGELOG.md` 记一行（§8.1） |
+| `DB_SCHEMA_VERSION` | 只在 schema 变了时 +1，且**必须同时写 Migration**（§5.1） | `WheremyDatabase.kt:16` |
+
+**记账位置只有一个**：`app/build.gradle.kts` 的 `defaultConfig`；`CHANGELOG.md` 是它的历史，不是第二份真值（`RULES.md` §16 第 8 条）。
+
+**版本号本身不参与任何兼容判断**：`app/src/main` 里没有一处读 `versionCode`；`versionName` 只经 `BuildConfig.VERSION_NAME` 写进备份包的 `manifest.appVersion`（`AppContainer.kt:54`），导入侧从不读它（`BackupRepository.kt` 只比 `schemaVersion`）。能不能导入由 `DB_SCHEMA_VERSION` 说了算。
+
+### 2.3 版本兼容矩阵
+
+| 号 | 定义在哪 | 谁写 | 谁读 | 变了会怎样 |
+|---|---|---|---|---|
+| `versionCode` | `app/build.gradle.kts:17` | 手工 | Android 安装器；**应用代码不读** | 变小的包装不上去（§5.3） |
+| `DB_SCHEMA_VERSION` | `WheremyDatabase.kt:16` | 手工 | Room 的 `version`（`:20`）；导出时原样写进包的 `schemaVersion`（`BackupRepository.kt:49`） | +1 而没有 Migration ⇒ 破坏性迁移**静默清空整机数据**（⭐FR-DB-01） |
+| 备份包 `schemaVersion` | `BackupFormat.kt:16` 的字段 | 导出时自动，值 = 当时的 `DB_SCHEMA_VERSION` | 导入侧**唯一**的兼容闸门：大于 `DB_SCHEMA_VERSION` 就拒（`BackupRepository.kt:139-143`） | 只查上界、**不查下界**——旧包一律照收 |
+| 备份包 `appVersion` | `BackupFormat.kt:19` | 导出时写 `BuildConfig.VERSION_NAME`（`AppContainer.kt:54`） | **没有任何代码读它** | 只用于人拿 zip 追问"这包是谁导的" |
+
+一句话记住：**一个号管安装（`versionCode`），一个号管数据（`DB_SCHEMA_VERSION` = 包里的 `schemaVersion`）**；改后者是高风险动作。
+
+### 2.4 新版本必须能导入旧包（不可变项）
+
+`REBUILD.md` §2 第 2 条把**备份包格式**列为硬性不可变项，理由只有一句：**旧包必须还能导入**。技术上靠三条：① `ignoreUnknownKeys = true`——`@Entity` 将来加字段，旧包少那些键照样读（`BackupFormat.kt:45-50`）；② `explicitNulls = false`——NULL 列在 json 里是**缺键**，读侧一律 `.get()`，不许 `row["col"]`（`REBUILD.md` §7 B6）；③ 导入闸门只拦"来自更新的版本"，不拦旧包（`BackupRepository.kt:139`）。
+
+**这条不可变项没有自动化守门人**：`BackupRepositoryTest`（18 例）造的是同版本内的包。所以每次发布都要**用上一版导出的真包演一遍**——那就是 §3 第 7 条与 §5.4。
+
+---
+
+## 3. 发布前必做（⭐ 清单）
+
+七条，每条三栏都要写出来：**为什么必须**（不说清就会被下一轮当可选项砍掉）、**怎么算做完**（可判定，不是感觉）、**谁签收**（一个角色名，不是"大家"）。
+
+### 3.1 ⭐FR-DB-01：用真实 Room Migration 替换 `fallbackToDestructiveMigration(true)`
+
+**为什么必须**：`WheremyDatabase.kt:35` 挂着 `fallbackToDestructiveMigration(true)`，而 `DB_SCHEMA_VERSION` 恒为 1（`:16`）。Room 一旦发现库里的版本对不上又没有 Migration，就直接**清空四张表**——用户看不到任何提示，照片文件还在，行没了。现在改任何一个 `@Entity` 字段就是这个后果。解禁条件写在 `RULES.md` §15 W2；`WheremyDatabase.kt:32` 的注释本来也写着"发布前换成真实 Migration"。
+**怎么算做完**：① `DB_SCHEMA_VERSION` 升到 2；② 写 `Migration(1, 2)`，把本次字段变化逐条翻成 SQL；③ `Room.databaseBuilder(...)` 上加 `.addMigrations(...)` 并**删掉** `.fallbackToDestructiveMigration(true)`；④ `app/schemas/…/2.json` 导出来后与 `1.json` 逐列对照（`room.schemaLocation` 在 `app/build.gradle.kts:44`）；⑤ `androidx.room:room-testing` 已在测试依赖里（`app/build.gradle.kts:74`），写"从 1 升到 2 后老数据还在"的用例；⑥ 变异验牙：把 Migration 里的一条 `ALTER TABLE` 删掉，那条用例必须红。
+**谁签收**：架构师（Migration 写对）+ 测试（升级用例与变异）+ 软件经理（验收）。
+
+### 3.2 ⭐FR-RLS-01：release 签名
+
+**为什么必须**：`app/build.gradle.kts:21-23` 里 `release` 只有 `isMinifyEnabled = false`，**没有 `signingConfig`**，所以现在出不了能侧载给别人的正式包——而"侧载给别人用"正是 ⭐FR-RLS-01 的触发条件（`PRD.md` §5）。
+**怎么算做完**：① 生成 keystore——PATH 上有 `keytool`（version-fox 那个 JDK），`keytool -genkeypair` 支持 `-keystore` / `-alias` / `-keyalg` / `-keysize` / `-validity`（本机 `keytool -genkeypair --help` 核过）；口令与别名**记在密码管理器里，不写进仓库、不写进任何文档**；② keystore 放在**仓库之外**——`.gitignore` 里的 `*.keystore` / `*.apk` / `local.properties` 只是"不会误提交"，不等于"放这儿安全"；③ 配 `signingConfigs` + `buildTypes.release.signingConfig`；④ 核一遍：`gradle :app:signingReport` 逐个变体打印 `Config` / `Store` / `Alias`——**今天 release 那一段是 `Config: null`**（实跑过），配好之后这里必须不再是 null；⑤ 出包后用 `apksigner.bat verify --print-certs <apk>` 核签名者与证书摘要（本机在 `D:\Lib\Android\Sdk\build-tools\36.1.0\apksigner.bat`，对现有 debug 包跑过）；⑥ `git status` 干净，里面没有 keystore。
+**谁签收**：软件经理（只有他知道 keystore 在哪）+ 架构师（配置）。
+
+### 3.3 `isMinifyEnabled = false` 的处置
+
+**为什么必须**：现在 release 不混淆（`app/build.gradle.kts:22`）。这本身不是缺陷，但**必须在发布记录里写明理由**；否则下一个人会以为这是忘了配，顺手打开，然后带着一套没验过的 keep 规则发出去。
+**怎么算做完**：二选一写进发布记录。**A 保持 `false`**——理由写成一句实话（侧载单机、包体不是约束），并注明"开混淆属于新引入的风险，不是一句配置"；**B 打开混淆**——`isMinifyEnabled = true` + 完整 keep 规则 + 全量回归（39 类 / 481 例）+ 真机冒烟（`REBUILD.md` §6 七条里至少走 1 / 3 / 4 / 7）。两条路都要求发布记录里有"release 是否混淆 + 理由"这一行。
+**谁签收**：软件经理。
+
+### 3.4 权限复核
+
+**为什么必须**：`PRD.md` FR-PRM-01 要求「权限清单最小」：只有 `INTERNET`（AI 请求）、`POST_NOTIFICATIONS`（到期提醒）、`CAMERA`（应用内取景），**没有任何存储权限**——选图走 SAF / Picker（FR-SRC-01）。多一条权限就推翻这条需求。
+**怎么算做完**：① 打开 `AndroidManifest.xml` 数 `<uses-permission>`：只许那三条；② 装机后在系统「应用信息 → 权限」里对照一遍；③ 核合并后的清单 `app/build/outputs/logs/manifest-merger-debug-report.txt`（本机现在就有这一份）。三处都只看这三条。
+**谁签收**：测试（真机那一遍）+ 软件经理（清单那一遍）。
+
+### 3.5 `allowBackup="false"` 复核
+
+**为什么必须**：`REBUILD.md` §2 第 4 条——一动就把库和 key 交给系统云备份；而且设置页那句承重文案立刻变成假话：「应用已被系统设置为不做云备份（allowBackup=false），导出是你唯一的迁移手段。」（`SettingsScreen.kt:307-308` 🗣）。按 NFR-02（`RULES.md` §16），一句不成立的界面话就是缺陷。
+**怎么算做完**：① `AndroidManifest.xml:13` 仍是 `android:allowBackup="false"`，逐字核；② 装机后在真机上把设置页那句从头读一遍，确认与事实一致；③ 记进发布记录（本条不产生别的证据，但每年都会有人想改它）。
+**谁签收**：软件经理。
+
+### 3.6 备份 / 导入回归（`RULES.md` §12 全部判据）
+
+**为什么必须**：导出 zip 是**唯一**的迁移手段（`SettingsScreen.kt:307-308`）；这条链坏掉，用户数据就没有出口。而 §12 整节都是 🔒。
+**怎么算做完**：按 `RULES.md` §12 四小节各走一遍并留证据。**§12.1 导出口径**——四张表在同一个事务里读、同一路径只写一次、读不到的图跳过；包内不含 key 与设置（`BackupRepository.kt:28` 的构造参数里刻意没有 `SettingsRepository`）。**§12.2 固定顺序**——读包 → 校验 → 一个事务落库 → 事务成功之后才动照片；覆盖导入那句承重文案（`SettingsScreen.kt:107` 🗣）**逐字没改**。**§12.3 四拒一放行**——四种坏包各造一个、合并与覆盖各试一次，确认库里一条没动；"包里有路径而 zip 里没这个文件"必须**放行**。**§12.4 MERGE / OVERWRITE**——合并保留本机已有；覆盖先清空再写，并按包内清单删掉本机多余的照片。证据 = 本轮 `BackupRepositoryTest`（18 例）的 XML + 真机上一次"导出 → 清空 → 覆盖导入 → 对账"的读数。
+**谁签收**：测试（自动化那一半）+ 用户（真机那一半）。
+
+### 3.7 迁移演练：旧包 → 导入 → 对账
+
+**为什么必须**：上面六条都是组件级的；只有真拿**上一发布版导出的包**灌进**本次要发的包**，才知道 §2.4 那条不可变项还成立。代码不会替你拦这一条——`validate` 只查引用完整性，不查"这份包是哪个版本导的"。
+**怎么算做完**：顺序固定不许跳。① 在装着**上一发布版**的机器上：设置页 →「导出到文件」→ 存到应用沙箱之外；② 记下回执那一行数字（`导出完成 · 位置 N 个 · 物品 N 件 · 照片 N 张 · X MB`，`SettingsViewModel.kt:271,279`），它是对账基准；③ 升级到本次要发的包（§6.3）；④ 设置页 →「合并导入」→ 选 ①那个包：主键都在，正确结果是**三个数不变**（数字涨了说明主键没对上）；⑤ 再走一次「覆盖导入」，对账三个数与 ② 一致；⑥ 抽查：照片墙上原图与缩略图都在、待归类里有草稿、位置树下钻正常、到期日还在。**反面演练（10 分钟）**：把包里 `manifest.json` 的 `schemaVersion` 手改成 `2`，导入必须被拒且本机数据一条不动——自动化版本就是 `BackupRepositoryTest.packageFromNewerSchemaLeavesDatabaseUntouched`。
+**谁签收**：发布负责人（①–⑤）+ 用户（⑥ 回"看到了什么"）。
+
+---
+
+## 4. 发布门禁 G0–G5（与 `PROCESS.md` §6 同一套）
+
+门禁定义在 `PROCESS.md` §6，发布这件事本身走的是 `PROCESS.md` §3.8 发布通道；本节只写**发布场景下的证据要求**：日常迭代里这六门随批次走，发布时必须**一次性全齐**，证据要能贴进发布记录（§8.2）。六门是**与关系**。
+
+| 门 | 发布场景要交的证据 | 不满足就不许发布，因为 |
+|---|---|---|
+| **G0 构建** | `gradle :app:assembleDebug` 前台跑完、`BUILD SUCCESSFUL`；`app/build/outputs/apk/debug/app-debug.apk` 的 mtime 是本轮的 | 包可能是上一轮的——`install -r` 成功 ≠ 新代码生效（`REBUILD.md` §6） |
+| **G1 单测全绿双证** | ① 命令输出 `BUILD SUCCESSFUL`；② `app/build/test-results/testDebugUnitTest/*.xml` 里 **39 份**的 mtime 都晚于本轮起跑时刻；③ 自己数出 `tests=481 failures=0 errors=0` | 只有 exit code 是 0、或 XML 是上一轮的，只能判 **NO-VERDICT**，不是绿（`REBUILD.md` §1.1、§7 A1/A2） |
+| **G2 变异验牙** | 本批改动**每一处**的验牙记录：改坏哪一行、期望哪条红、实际红了哪条 | 全绿只证明"测试跑过了"，不证明"测试有牙"（`REBUILD.md` §1.3） |
+| **G3 覆盖对账** | 正向：`PRD.md` §7 表里每一行 → 测试类真的存在、`@Test` 数与表一致；反向：`grep -rl "@Test" app/src/test \| wc -l` = 39、`grep -c` 求和 = 481 | **类名存在不等于有人守**；`ItemRow` 这种"没有自己的类"的行要落到别家的例数里（`REBUILD.md` §1.2） |
+| **G4 文档同步** | `PROCESS.md` §5 同步矩阵要求的每一份都改到位；`CHANGELOG.md` 有本次发布那一行；所有 `⬜` 都带触发条件与代价 | 改代码不改文档 = 没做完（`README.md` §6） |
+| **G5 真机人工清单签收** | `REBUILD.md` §6 那七条**由人在真机上**逐条回"看到了什么"，失败的回原话；交给用户的那份走 `templates/device-acceptance.md` 与 §6 末三条硬规矩 | 代理无法自证这七条；相机 HAL、选图器、通知、图标渲染只有真机能答（`UI.md` §15） |
+
+**与 §3 的分工**：§3 是"要做的动作"，G0–G5 是"这些动作必须留下什么证据"。两处都不许用"应该没问题"代替证据。
+
+---
+
+## 5. 迁移与兼容
+
+### 5.1 schema 升级的标准流程（六步，顺序不许换）
+
+1. **先确认这次真的非改不可**：验收期字段冻结（`REBUILD.md` §2 第 1 条），先想清楚能不能靠不动 schema 解决。
+2. **写 `Migration(old, new)`**，把每一条字段变化翻成 SQL。
+3. **升 `DB_SCHEMA_VERSION`**（`WheremyDatabase.kt:16`）。这一处同时定了 Room 的 `version`（`:20`）与导出时写进包的 `schemaVersion`（`BackupRepository.kt:49`）——**只有一个号要改**，别去手改包里的号。
+4. **让 schema JSON 导出来再对账**：跑一次会触发 KSP 的构建，`app/schemas/com.wheremy.app.data.db.WheremyDatabase/<新号>.json` 会出来；与上一份**逐列 diff**，多出来的列、改掉的非空约束、索引，每条都要能在第 2 步的 SQL 里找到对应。
+5. **写"升上来"的测试**：`androidx.room:room-testing` 已在 `app/build.gradle.kts:74`；从旧版本建库 → 升 → 断言老数据还在、新列是默认值。
+6. **删掉破坏性迁移**：`.addMigrations(...)` 与 `.fallbackToDestructiveMigration(true)` 不能并存（`WheremyDatabase.kt:33-36`）。**留着它，第 2 步写漏一条也不会红，只会静默清空。**
+
+备份包 `schemaVersion` 的处置：**不需要手改**，它跟着 `DB_SCHEMA_VERSION` 走。真正要保证的只有一件事——新版本仍能导入 `schemaVersion = 1` 的旧包（§2.4）。**派生列也要一起想**：`search_text` 带 `SearchTextBuilder.FIELD_VERSION`（现在 2），加字段后是启动时补算一遍；能在这条 Migration 里一次算完就别留给启动（`TECH_STACK.md` 的自造清单 I 行与 T7 记着这件事）。
+
+### 5.2 备份包向前兼容规则
+
+- **闸门只有一条**：包里的 `schemaVersion > DB_SCHEMA_VERSION` 就拒，文案是 `BackupRepository.kt:140-142` 那句（以「这个备份来自更新的版本」开头、以「先升级应用再导入」结尾，括号里插 `schema X > N`）。**语义要读准**：这是"你机上的应用比包旧"，解法是**升应用**；把包里的号改小只会让后面的字段解析悄悄出错。
+- **旧包一律照收**：没有下界检查。所以"新版本能导入旧包"必须自己演一遍（§3 第 7 条）。
+- `explicitNulls = false` ⇒ NULL 是**缺键**：读侧一律 `.get()`，不许 `row["col"]`（`BackupFormat.kt:46-50`、`REBUILD.md` §7 B6）。
+- `ignoreUnknownKeys = true` ⇒ **加字段安全；删字段或改字段语义不安全**——旧包里的键会被静默丢掉，界面当时不会说话。
+
+### 5.3 降级不可行
+
+1. **装回旧版本解决不了 schema**：只要有任何一版升过 schema，库里就是新的，而旧版本里没有那条 Migration——破坏性迁移还在（`WheremyDatabase.kt:35`），结果轻则报错、重则清空。（今天两边都还是 `DB_SCHEMA_VERSION = 1`，所以这一条眼下还只是预案；一旦 ⭐FR-DB-01 落地，它立刻变成现成的坑。）
+2. **降级安装本身就被挡**：本机 `adb --help` 写着 `-d: allow version code downgrade (debuggable packages only)`——这条捷径**只对 debug 包成立**。正式包要装回旧版只能先卸载，而卸载会把机内数据一起删掉。
+3. **已经覆盖导入的数据回不来**：`RULES.md` §12.4——覆盖导入先 `deleteAll` 四张表再按包重建，并按包内清单删掉本机多余的照片（`removeLocalPhotosNotIn`），那一步不在事务里。
+
+**结论：能退的只有 APK，退不了的是数据。** 所以动手之前先导出（§7.3）。
+
+### 5.4 导出 → 升级 → 导入（推荐路径）
+
+```
+旧机（旧版本）             设置 → 备份 →「导出到文件」→ 记下回执那三个数
+      ↓ 同一个 zip
+新机 / 新版本（侧载 APK）  设置 → 备份 →「合并导入」→ 对账三个数
+      ↓ 只在"就是要用包里的内容覆盖本机"时才走
+                          设置 → 备份 →「覆盖导入」（先清空 + 二次确认）
+```
+
+- **合并导入是默认选择**：已有的按主键原样保留，只补没有的（`RULES.md` §12.4）。
+- **覆盖导入是破坏性的**：那句标题「覆盖导入会清空本机数据」不是修辞。
+- **AI 配置不跟着走**：包内不含任何设置（`PRD.md` FR-BAK-04、⛔D12）。新机上要重填 base_url / model / key，按「保存 AI 配置」之后才生效。旧机上那句实话要照做：「key 只存在这台手机的本地设置里：不进备份包，也不跟着任何云端同步走。换手机请先在旧机上把它清空，再重装。」（`SettingsScreen.kt:256-258` 🗣）。
+
+---
+
+## 6. 构建与分发
+
+### 6.1 命令行构建 fact
+
+| 事实 | 值 | 出处 |
+|---|---|---|
+| 没有 wrapper | 仓库里没有 `gradlew`；用 PATH 上的 gradle 8.14.3（version-fox）。**加 CI 时另说**：官方写法要求提交 wrapper（`TECH_STACK.md` §8.2 更正三 / T10） | `REBUILD.md` §8 第 1 条、§7 A5 |
+| Java | `java` 是 Temurin 21.0.8，项目按 JVM 17 编译 | 同上 |
+| SDK | `ANDROID_HOME = D:\Lib\Android\Sdk`；`local.properties` 被 gitignore：**不提交，内容也不写进任何文档** | `REBUILD.md` §8 第 2 条 |
+| adb | **不在 PATH**，用 SDK 目录内的绝对路径（`…\platform-tools\adb.exe`）；本机**没有 `sdkmanager`**（SDK 里没有 `cmdline-tools`），别把装 SDK 组件写进脚本 | `REBUILD.md` §8 第 2 条 |
+| 平台 | Windows 11 + Git Bash；带设备路径的 adb 参数要 `MSYS_NO_PATHCONV=1` | `REBUILD.md` §8 第 4 条 |
+| 真机 | Xiaomi 13 / HyperOS，序列号 `9aa4b43e`；`adb devices` 为空时**不许用模拟器凑数** | `REBUILD.md` §8 第 5 条 |
+
+```bash
+gradle :app:assembleDebug          # 出 debug 包
+gradle :app:testDebugUnitTest      # 全量单测
+```
+
+**gradle 只许前台跑**：后台 shell 里没有 gradle，命令会以 exit 0 + 空输出结束，而 `test-results` 里躺着上一轮的 XML（`REBUILD.md` §7 A1）；脚本调 gradle 必须显式给项目根当 `cwd`（A2）。
+
+### 6.2 debug 与 release 的差别
+
+| | debug | release（现在） |
+|---|---|---|
+| 混淆 | 无 | `isMinifyEnabled = false`，同样无 |
+| 签名 | 自动 debug 签名，能装 | **无 `signingConfig`，出不了能侧载的包**（⭐FR-RLS-01） |
+| 设置页 debug 区 | 有 | **没有**（`SettingsScreen.kt:69` 默认值取 `BuildConfig.DEBUG`，`WheremyRoot.kt:389` 走的就是默认值） |
+| 可降级安装 | 可以 | 不可以（§5.3） |
+
+**由此得出一条发布期的实话**：`SettingsScreen.kt:172-174` 的「调试：立刻检查一次到期提醒」与 `:260-267` 的「AI 留痕：N 条…」**只在 debug 包上出现**（`UI.md` §7.1 第 5 项、§7.2 第 6 项）。所以正式包上**不能**按一下立刻验提醒链路（只能等那一天自己到），也**看不到** AI 留痕那一行（要看只能连 adb 取 `files/ai-trace`，`AppContainer.kt:72`）。这句要写进发布记录，免得下一个人以为正式包上有这两样。
+
+### 6.3 侧载步骤
+
+```bash
+ADB=/d/Lib/Android/Sdk/platform-tools/adb.exe        # 不在 PATH，用绝对路径
+$ADB -s 9aa4b43e install -r app/build/outputs/apk/debug/app-debug.apk
+$ADB -s 9aa4b43e shell am force-stop com.wheremy.app
+$ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
+```
+
+- **三件必须连着做**：`install -r` 之后要 `am force-stop`（否则前台还是旧进程）+ `am start`（`REBUILD.md` §7 C12）。
+- **`install -r` 不清权限**：`POST_NOTIFICATIONS` 不会因为重装而变（C12）。别把"装完通知没了"归给重装包；真正会清掉它的是 `pm clear`。
+- **`am force-stop` 会把已发出的通知一起收掉**：要验"点通知跳转"得用 HOME + `am kill`（C13）。
+- 想在真机上直接落到"快到期 / 已过期"那张照片墙（通知那一跳的落点）：`$ADB shell am start -n com.wheremy.app/.MainActivity --es com.wheremy.app.entry expiring`（键与值来自 `MainActivity.kt:38,41`）。
+- 装完先点开一次不崩，再去跑人工清单。
+
+### 6.4 环境快照要写哪两行
+
+交付给用户的验收单（`templates/device-acceptance.md`）与发布记录都必须**写在最前面**（`REBUILD.md` §6 末）：① **装的是哪个包、装于何时**——`install -r` 成功 ≠ 新代码生效；② **本机数据是否为空、那条权限是否还没授过**——不清空的数据会让"第一次"的行为根本测不出来。
+
+### 6.5 绝不许把 key 打包或注入
+
+- 开发期的 key 走 `local.properties`（已 gitignore），**构建时不注入**（`PRD.md` FR-CFG-03）——它只是"记在本地别丢"，不是构建输入。
+- key 只存 DataStore（`wheremy_settings`）：**不进备份包、不进 AI 留痕、不进 git**（`RULES.md` §12.1、§13.3；`PRD.md` ⛔D12）。
+- 导出通道**物理上**碰不到 key：`BackupRepository` 的构造参数里刻意没有 `SettingsRepository`（`BackupRepository.kt:28`）。
+- 发布前用一句话自查：**这个包里、这次提交里、这条日志里，有没有任何一串能当凭据用的字符串？** 有就停手（`README.md` §6 第 3 条、`REBUILD.md` §9）。
+
+---
+
+## 7. 回滚与事故处置
+
+### 7.1 哪些能退、哪些退不了
+
+| 对象 | 能退吗 | 怎么退 | 前提 |
+|---|---|---|---|
+| APK | ✅ 能 | 装回旧版本（注意 §5.3 的降级限制） | 旧包还在手里 |
+| 已经升过 schema 的库 | ❌ 不能 | 装回旧版本救不了它，只会更糟；只能**前滚**（出一版带 Migration 的包） | 有包可前滚 |
+| 被覆盖导入覆盖掉的数据 | ❌ 不能 | 只能拿那个 zip 重新导入 | **动手前导出过** |
+| API key | 不适用（它是配置，不是数据） | 换机前在旧机上清空再重装（`SettingsScreen.kt:257-258` 🗣） | 得先知道旧机上填的是什么 |
+
+### 7.2 事故分级与处置动作
+
+| 级 | 什么算（判据以 `PROCESS.md` §7.2 为准） | 第一步 | 第二步 |
+|---|---|---|---|
+| **P0** 数据损失 / 不可逆 | 用户数据被删、被覆盖、备份不可恢复、静默清库 | **停手**：不再执行任何会写库或删文件的动作 | 让用户把**最近一次导出的包**原样留住——别改名、别移动、别解压 |
+| **P1** 主线不可用 / 假话 | 录入或查找走不通；**界面上有一句话不成立**（NFR-02 违例——文案不成立按 P1，不是 P3） | 让用户回一句**屏幕上的原话**，并把当前那一屏截下来 | 判是包的问题还是数据的问题：用空数据重装一次看能不能复现 |
+| **P2** 局部错误 | 某个分支不对、文案不精确、排序 / 统计偏差 | 记成缺陷（`templates/defect-report.md`） | 下一个空闲批次处理，别为它临时出包 |
+| **P3** 体验与打磨 | 排版、措辞可改、无障碍缺口 | 记档 | 与相关 FR 的 `⬜` 一起排 |
+
+三条纪律，每条都是真代价换来的：① **对用户数据有影响的动作先停手**——`pm clear`、覆盖导入、删除物品 / 位置（`REBUILD.md` §9）；② **先取证再动手**——报"丢了什么"之前先把"现在还剩什么"读一遍（`RULES.md` §16 第 1 条、`REBUILD.md` §7 C18）；③ **任何会动机上数据的脚本，动作必须在 `if __name__ == "__main__"` 守卫之下**（`REBUILD.md` §7 C16——这条是当场删掉用户一件物品换来的）。
+
+### 7.3 硬规矩：用户数据先导出再动手
+
+在**任何**会写库或删文件的操作之前，先让用户在应用内走一次设置页 → 备份 →「导出到文件」，并确认他说看见了那句回执。
+
+适用场景（不限于）：覆盖导入、`pm clear`、卸载重装、换机、装一个带 schema 升级的新包、任何"试试看"的实验。理由很直接：**导出是唯一的迁移手段**（`SettingsScreen.kt:307-308` 🗣），没有第二个出口。
+
+---
+
+## 8. 发布后跟踪
+
+### 8.1 `CHANGELOG.md`（仓库根）
+
+**先分清两份同名文件**：**代码仓库根 `CHANGELOG.md`** = 软件版本记录（每一版给用户的变化、已知问题），发布负责人写；**`docs/CHANGELOG.md`** = **本文档集**的变更记录（谁在哪一轮改了哪份文档），改文档的人写。两者不是一回事。
+
+仓库根现在**还没有**这份文件（`git ls-files` 里没有），发布的第一次就要建。格式照仓库既有的提交风格——中文一句话说清"改了什么以及代价"（`REBUILD.md` §9）：
+
+```markdown
+# 版本记录
+
+## 0.1.0 — <日期>（versionCode 1）
+### 新增
+- 拍照录入与 AI 预填；位置树；搜索与筛选；到期提醒；手动导出 / 导入。
+### 已知问题
+- 改 schema 会清空本机数据（⭐FR-DB-01 未落地）；该包未做 release 签名（⭐FR-RLS-01 未落地）。
+```
+
+**写入时机**：**出包之前**写，不是发出去之后补——`versionCode` 的记账位置就在那里（§2.2），发布记录（§8.2）要引用它。**只写用户看得懂的话**：不写 `文件:行`、不写内部批次号、不写任何 key（`REBUILD.md` §9）。
+
+### 8.2 发布记录
+
+模板 `templates/release-checklist.md`：复制一份填，建议文件名 `release-<versionName>-<日期>.md`；**别把填好的记录放回 `templates/`**，那是空白表单。发布记录至少要留下：环境快照两行（§6.4）、⭐ 七项的签收人、G0–G5 的证据、人工清单七条的回话、发布物哈希、24 小时观察项、回滚决定与签收人。
+
+**发布物哈希**：出包后对 APK 算一次 SHA-256 记下来（Windows 上 `certutil -hashfile <apk> SHA256`，或任何手边的哈希工具），连文件名一起记；配套的签名摘要用 `apksigner verify --print-certs` 看（§3.2）。下次要判"机上装的是不是这一版"，这两样是唯一的凭据。
+
+### 8.3 用户反馈 → 缺陷 → 修复
+
+```
+用户回一句原话
+  → templates/defect-report.md（标题 / 环境 / 最小复现 / 证据 / 影响面 / 分级）
+  → PROCESS.md §3.2（改一条已有行为）或 §3.1（补一条 FR）
+  → 先写一条会红的测试，再改代码
+  → 修完重新走 G0–G5，进下一版 CHANGELOG.md
+```
+
+- 用户念的那句**原话**是最有价值的证据：界面测试按文字找节点（`REBUILD.md` §2 第 9 条），他念的那句话常常就是要改的断言。
+- 用户报"某个说法不成立"要当**缺陷**收，不当文案建议收——那是 NFR-02（`RULES.md` §16）。
+- 缺陷单里**不许贴隐私**：不贴真机导出的 `data.json`、不贴含隐私的截图与 dump（`README.md` §6 第 3 条）。
+
+### 8.4 留痕与设置页 debug 区的使用
+
+- **只在 debug 包上**（§6.2）：设置页「AI 分析照片」那节底下有「AI 留痕：N 条（发出去的提示词与模型回应原文，只留最近 10 条）」（`SettingsScreen.kt:264-265`）。按过一次录入页的「重新分析」再回来看这一行，**条数在涨就说明留痕真落了盘**——不连 adb 也能确认 AI 那一跑发生了什么（`UI.md` §7.2 第 6 项）。
+- 留痕落在 `files/ai-trace`（`AppContainer.kt:72`），**不在 `files/photos` 底下**，所以不随备份出门（`PRD.md` FR-TRC-03）；里面是用户的**位置清单**，属隐私，不许贴进缺陷单。
+- 同一块 debug 区还有「调试：立刻检查一次到期提醒」（`SettingsScreen.kt:173`）：它**无视"今天已经说过"**再跑一次，验收通知链路不用等到第二天（`ReminderWorker.kt:44-51`）。
+
+---
+
+## 9. 发布检查清单（可直接执行版）
+
+顺序就是操作顺序，每条都能判"做了没做"。
+
+**准备**
+
+1. [ ] 确认这次发的是什么：改了哪些 FR / CR，逐条写进仓库根 `CHANGELOG.md`（§8.1）。
+2. [ ] `versionCode` +1、`versionName` 按语义化定好（`app/build.gradle.kts` 的 `defaultConfig`）（§2.2）。
+3. [ ] 逐条过 ⭐ 七项（§3）并写下签收人；没做的写清为什么这次不做、什么时候做。
+4. [ ] 本次动了 schema 的话：走完 §5.1 六步，`app/schemas/…/<新号>.json` 已进 git，`fallbackToDestructiveMigration(true)` **已删除**。
+5. [ ] 权限复核：`AndroidManifest.xml` 只有 `INTERNET` / `POST_NOTIFICATIONS` / `CAMERA`，无存储权限（§3.4）。
+6. [ ] `allowBackup="false"` 复核，设置页那句"不做云备份"逐字仍成立（§3.5）。
+7. [ ] 文档同步：`PROCESS.md` §5 矩阵要动的每一份都动了；`⬜` 项都带触发条件与代价（G4）。
+
+**构建与判绿**
+
+8. [ ] 前台跑 `gradle :app:testDebugUnitTest`，拿到 `BUILD SUCCESSFUL`（§6.1）。
+9. [ ] 数 XML：`app/build/test-results/testDebugUnitTest/*.xml` **39 份**，mtime 全部晚于本轮起跑时刻（G1）。
+10. [ ] 自己数出 `tests=481 failures=0 errors=0`——**不认 exit code**（G1）。
+11. [ ] 覆盖对账正向：`PRD.md` §7 每行都能落到真实存在的测试类，`@Test` 数与表一致（G3）。
+12. [ ] 覆盖对账反向：39 个类 / 481 例（G3）。
+13. [ ] 变异验牙：本批每一处改动都做过"改坏它 → 期望那条红"；无牙的补或删（G2）。
+14. [ ] `gradle :app:assembleDebug`，确认 `app/build/outputs/apk/debug/app-debug.apk` 的 mtime 是本轮的（G0）。
+15. [ ] 记下 APK 的 SHA-256（§8.2）。
+
+**装机与人工**
+
+16. [ ] 环境快照第 1 行：装的哪个包、装于何时（§6.4）。
+17. [ ] 环境快照第 2 行：本机数据是否为空、`POST_NOTIFICATIONS` 是否还没授过（§6.4）。
+18. [ ] **先导出**：设置页 → 备份 →「导出到文件」，记下回执那三个数（§7.3）。
+19. [ ] `install -r` → `am force-stop` → `am start`，点开不崩（§6.3）。
+20. [ ] 真机人工清单七条逐条签收（`REBUILD.md` §6）；交给用户的那份用 `templates/device-acceptance.md`，**不许出现内部编号**。
+21. [ ] 迁移演练：旧版本的包 →「合并导入」对账 →「覆盖导入」对账（§3.7）。
+22. [ ] 反面演练：把包的 `schemaVersion` 改成 `2`，导入被拒且本机数据一条没动（§5.2）。
+23. [ ] 备份包自查：包里没有 key、没有任何设置项（只看条目名，**别把包内容贴进任何文档**）。
+
+**发布与跟踪**
+
+24. [ ] 回滚预案写下来：装回哪个包、要不要先导出、谁知道 keystore 在哪（§7.1）。
+25. [ ] 签收：§3 七项 + G0–G5 六门，每格有名字（§4）。
+26. [ ] 归档：APK + 哈希 + keystore **位置**（只记位置，绝不记口令）。
+27. [ ] 发布后 24 小时观察项定下来：能不能打开、录一条、搜一次、导出一次、到期提醒那天有没有响（§8.4）。
+28. [ ] 24 小时内用户回的原话里出现异常 → 立刻开 `templates/defect-report.md`，按 §7.2 定级。
+
+---
+
+## 附：写作时发现的差异（2026-10-07 已全部处理）
+
+写本文时按基线 `cf73f5b` 核对了源码与现有文档。下面这些**不是本文的立场**，是核对时撞出来的差异；按 `README.md` §3.2 的裁法（先判定、再改错的那一边）**五处都已改掉**，留表作裁决留痕：
+
+| 文档 A 位置 | 文档 B 位置 | 冲突点 | 处理 |
+|---|---|---|---|
+| `PRD.md` §3.8 FR-BAK-06「四条拒，一条放行」 | `REBUILD.md` §3 M5「三条拒一条放行」 | 源码 `BackupRepository.kt:149-168` 的 `validate()` 实际抛 **4** 种拒 | **判"四条"对** → `REBUILD.md` §3 M5 已改；`RULES.md` §12.3 标题已改；另在 `RULES.md` §12.3 补了一句：读包阶段还有**第五道**拒（`manifest.schemaVersion > DB_SCHEMA_VERSION`，`BackupRepository.kt:139-141`），它不在 `validate()` 里 |
+| `DEVELOPMENT.md` §5.3 表最后一行："release 包只是'能装'" | 本文 §2.1 / §6.2；`PRD.md` ⭐FR-RLS-01 | "能装"不成立：`gradle :app:signingReport` 对 release 变体打印 `Config: null`（本机实跑） | **判本文对** → `DEVELOPMENT.md` §5.3 已改成"打不出能侧载的 release 包，验收期只用 debug 包" |
+| `PROCESS.md` §5 同步矩阵表（第 244 行） | 同表其余各行 | 两行被并成一行（缺换行），渲染时表体错行 | **已修**：`PROCESS.md` §5 拆回两行 |
+| `PRD.md` §5 ⭐FR-DB-01 那一行把注释引作「原话」 | 源码 `WheremyDatabase.kt:32` | 引文略去"破坏性迁移（尚无真实数据）"半句 | **判源码对** → `PRD.md` 已补全注释原文 |
+| `README.md` §5 表格最后一行「走 `RELEASE.md` §4 清单」 | 本文 §4 / §9 | 指路偏了：§4 是门禁 G0–G5，可执行清单在 §9 | **判本文对** → `README.md` §5 已改成"逐条签收 `RELEASE.md` §9 的可执行清单（门禁与证据要求见 §4）" |
