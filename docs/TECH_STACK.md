@@ -344,6 +344,7 @@
 |---|---|---|
 | 类型转换注解 | `@TypeConverter` / `@TypeConverters` | **`@ColumnTypeConverter` / `@ColumnTypeConverters`**（`androidx.room3` 里**没有** `TypeConverter`）；另有新的 `ProvidedColumnTypeConverter`、`DaoReturnTypeConverter(s)` |
 | ktx 构件 | `androidx.room:room-ktx` | **没有 `room3-ktx`**（能力已并入 `room3-runtime`） |
+| 事务 API | `db.withTransaction { }` | **`db.withWriteTransaction { }`**（另有 `withReadTransaction` / `useWriterConnection` / `useReaderConnection`）；在 `try/catch` 里要写 `withWriteTransaction<Unit>`，否则 catch 分支的 `throw` 会把 lambda 的返回类型推成 `Nothing` |
 | 报错体验 | — | 写错注解名的报错极其笼统：`e: [ksp] [MissingType]: Element 'X' references a type that is not present` —— **看到这句先怀疑注解名/依赖名，不要去查 schema** |
 
 **另外两条实测事实**：

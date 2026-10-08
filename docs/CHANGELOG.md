@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-10-09 · P1 收尾：仓库层与领域层（P1 关单）
+
+**触发**：用户"按建议执行，没有需要拍板的地方就自动进行下去"。
+
+**交付（提交 `0ea72c7`）**：
+
+| 文件 | 内容 |
+|---|---|
+| `data/repo/Models.kt` | `ItemDraft`/`Filters`/`ItemSummary`/`PhotoDeletion` + 三张词表（类别 12、季节 4、到期类型 4） |
+| `data/repo/ItemRepository.kt` | `newDraft`（两行同生同死）、`newDraftSharingPhoto`（不写新文件）、`swapPhoto`（先写新→改行→回收旧）、`confirm`（名称必填 + `lastMovedAt` 三档 + 到期改了就重新武装）、`keepAsDraft`（位置不动）、`move`（空名不转 CONFIRMED）、`rankedSearch`、`summaries`、`rebuildSearchText`（只补算变化）、`photoDeletionOf`、`delete`（先删行再回收） |
+| `data/repo/LocationRepository.kt` | 同级重排**按显示次序重编号**（不是交换）、`changeParent` 三道 require、`delete` 门槛 + `LocationNotEmptyException(childCount, itemCount)`、`setPhoto`（一位置一张） |
+| `domain/LocationTree.kt` + `LocationTreePolicy.kt` | 全量入内存、孤儿当根、`seen` 断环、`selectablePaths`（**路径字符串 + 根不列**）、`descendantIds`（**含自己**） |
+| `domain/SearchRanker.kt` | 五档打分：名字全等 100 / 前缀 80 / 包含 60 / 别名 40 / 派生列 20 |
+
+**判绿双证**：**12 类 / 73 例**、`freshXml=12/12`、`failures=0 errors=0`、Spotless 通过。
+
+**本轮踩到并已入档的四条（`PLAN.md` §3.4 F12–F15）**：
+
+1. **F12 Room 3 的事务 API 改名**：`withTransaction` → **`withWriteTransaction`**；`try/catch` 里要显式 `<Unit>`。
+2. **F13 KDoc 里写 `/**` 会让整个文件变成未闭合注释**（Kotlin 块注释可嵌套）——中文里紧跟斜杠的加粗要留空格。
+3. **F14 `spotlessApply` 不能和编译放在同一次 Gradle 调用里**（并行执行 → 编译读到半截文件，报出文件末尾之外的行号）。
+4. **F15 位置树语义要按参照逐条对齐**：`selectablePaths()` 是**路径字符串且根不列**、`descendantIds()` **含自己**——我第一版理解反了，3 条测试红，读参照 `LocationTree.kt` 后修正。
+
+**阶段状态**：`PLAN.md` §10 → **P0 ✅、P1 ✅**（`applyAnalysis` 的 AI 字段合并按计划并入 P3）。下一步 **P2 录入闭环**。
+
+---
+
 ## 2026-10-08 · P1 数据与照片层 + 参照实现装进真机（截图对比基线就位）
 
 **触发**：用户拍板"开 P1"与"参照 APK 走复制源码到临时目录构建"。

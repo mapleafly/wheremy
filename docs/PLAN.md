@@ -173,6 +173,10 @@ D:\src\dsh\wheremy\
 | F8 | Nav3 的 `entry` 是 `EntryProviderScope` 的成员，**不需要 import** | 已修；`NavKey`/`entryProvider`/`NavDisplay` 三个 import 足够 |
 | F10 | **Room 3 把类型转换注解改名了**：`androidx.room3` 里**根本没有** `@TypeConverter` / `@TypeConverters`，3.x 叫 **`@ColumnTypeConverter` / `@ColumnTypeConverters`**（另有 `ProvidedColumnTypeConverter`、`DaoReturnTypeConverter` 等新东西）；另外 3.x **没有 `room3-ktx`**（ktx 已并入 runtime）。错用旧名的表现是 KSP 报一句极其笼统的 `[MissingType]: Element 'X' references a type that is not present` | 已修（`Entities.kt` / `WheremyDatabase.kt` 注释里写明差别）。**教训**：选 3.x 前先把注解名逐个核实，别假设与 2.x 同名 |
 | F11 | **我们的 schema 与参照逐字段一致**（这是备份双向兼容的硬前提） | 用两边导出的 `1.json` 逐字段比对：4 张表、20/7/2/7 个字段的**列名/类型/非空/主键/外键/索引全部相同** ✅。以后任何 schema 改动都要重跑这次比对 |
+| F12 | **Room 3 的事务 API 也改名了**：2.x 的 `db.withTransaction { }` 在 3.x 是 **`db.withWriteTransaction { }`**（另有 `withReadTransaction`/`useWriterConnection`/`useReaderConnection`）；写错时编译报 `Unresolved reference 'withTransaction'`。另外在 `try/catch` 里用它要显式写 `withWriteTransaction<Unit>`，否则报 `Return type mismatch: expected 'Nothing', actual 'Unit'`（catch 分支是 `throw`） | 已修；连同 F10 一起写进 `TECH_STACK.md` §8.10 |
+| F13 | **KDoc 里写 `/**` 会让整个文件变成未闭合注释**（Kotlin 的块注释可以嵌套）：`目标不存在/**不能移到…**` 这串字符里 `/**` 开了一个嵌套注释，外层的 `*/` 只关掉了内层 → 报 `Syntax error: Unclosed comment`，且报错行号在文件末尾之外 | 已修（把那处改成顿号分隔）。**规矩**：中文里紧跟斜杠的 `**加粗**` 要留空格，别让 `/` 和 `*` 挨上 |
+| F14 | `spotlessApply` 与编译**不能放在同一次 Gradle 调用里**（`org.gradle.parallel=true` 时并行执行，格式化正在改源文件，编译读到半截文件 → 报出根本不存在的位置错误，如 `LocationRepository.kt:211` 而文件只有 210 行） | 本地规矩：先 `spotlessApply`，再单独跑测试；CI 里是 `spotlessCheck`（只读）所以不受影响 |
+| F15 | **位置树的语义细节必须按参照对齐**：`selectablePaths()` 返回**路径字符串**且**根不列**（根是"家/工作间"那层，不是容器）；`descendantIds()` **含自己**（`subtreeItemCount` 直接拿它求和） | 我第一版按"后代不含自己"写，3 条测试红；读参照 `LocationTree.kt` 后逐条对齐 |
 
 **规模（此刻）**：主源 8 个 Kotlin 文件 / 测试 4 个类 / 6 例；wrapper + CI + Spotless + 截图基线已就位。
 
@@ -326,7 +330,7 @@ D:\src\dsh\wheremy\
 | 阶段 | 状态 | 开始 | 结束 | 主要产出 | 出口判据（G0–G5 + 阶段判据） | 备注 |
 |---|---|---|---|---|---|---|
 | P0 工程与设计系统 | ✅ 完成 | 2026-10-08 | 2026-10-08 | 仓库骨架 + wrapper + CI 文件 + Spotless + 设计系统 token + DesignGallery + 截图基线（4 类 / 6 例）+ 真机冒烟 | 10 步全过（第 10 步晚补）；唯一未做的是 **CI 上真 GitHub 跑一次**（首次推送时验） | §3.4 有完整实测与 F1–F9 |
-| P1 数据与照片层 | 🟡 进行中（仅差仓库层） | 2026-10-08 | | 四表 + 三 DAO + 派生搜索列 + 照片三档 + EXIF 烤方向 + 引用计数回收 + 自检脚手架 | **8 类 / 32 例全绿**；**真机自检 7 项全绿**（中文命中、标签筛选、引用计数、EXIF 800×400→400×800）；schema 与参照逐字段一致（F11） | 仓库层（`ItemRepository`/`LocationRepository`）留到 P1 收尾或并入 P2 |
+| P1 数据与照片层 | ✅ 完成 | 2026-10-08 | 2026-10-09 | 四表 + 三 DAO + 派生搜索列 + 照片三档 + EXIF 烤方向 + 引用计数回收 + **仓库层与领域层**（`ItemRepository`/`LocationRepository`/`LocationTree`/`SearchRanker`） | **12 类 / 73 例全绿**（`freshXml=12/12`）；真机自检 7 项全绿；schema 与参照逐字段一致（F11） | 位置树语义按参照逐条对齐（F15）；`applyAnalysis`（AI 字段合并）留到 P3 与 AI 层一起做 |
 | P2 录入闭环 | ⬜ 未开始 | | | | `RULES.md` §3/§5/§6 全部判据 | |
 | P3 查找闭环 | ⬜ 未开始 | | | | `UI.md` §2–§5 逐条 + 删除话术四档 | |
 | P4 位置树 | ⬜ 未开始 | | | | `RULES.md` §8 全部 + FR-LOC-05 入口 | |
