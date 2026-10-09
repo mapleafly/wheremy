@@ -1,6 +1,7 @@
 package com.wheremy.app.ui.gallery
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -297,7 +298,7 @@ private fun FilterBar(state: GalleryUiState, expanded: Boolean, onToggleExpanded
     }
 }
 
-/** 单元（`UI.md` §3.5）：图 1:1 → 名字 + ⋮ → 位置行 → 到期行。 */
+/** 单元（`UI.md` §3.5）：图 1:1 → 名字 + ⋮ → 位置行 → 到期行。点图或名字进详情页。 */
 @Composable
 private fun GalleryCell(summary: ItemSummary, onOpen: () -> Unit, onMenu: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs)) {
@@ -306,7 +307,8 @@ private fun GalleryCell(summary: ItemSummary, onOpen: () -> Unit, onMenu: () -> 
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(MaterialTheme.shapes.medium)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clickable(onClick = onOpen),
         ) {
             if (summary.thumbPath != null) {
                 AsyncImage(
@@ -331,7 +333,9 @@ private fun GalleryCell(summary: ItemSummary, onOpen: () -> Unit, onMenu: () -> 
                 style = MaterialTheme.typography.titleSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onOpen),
             )
             IconButton(onClick = onMenu) {
                 Icon(Icons.Filled.MoreVert, contentDescription = "操作")

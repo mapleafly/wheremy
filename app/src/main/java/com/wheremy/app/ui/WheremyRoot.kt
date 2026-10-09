@@ -33,6 +33,7 @@ import com.wheremy.app.ui.capture.CaptureViewModel
 import com.wheremy.app.ui.debug.DataSelfCheckScreen
 import com.wheremy.app.ui.debug.DevSeedScreen
 import com.wheremy.app.ui.design.DesignGalleryScreen
+import com.wheremy.app.ui.detail.DetailScreen
 import com.wheremy.app.ui.gallery.GalleryScreen
 import com.wheremy.app.ui.review.ReviewScreen
 import com.wheremy.app.ui.theme.WheremySpacing
@@ -47,6 +48,9 @@ data object InboxKey : NavKey
 
 @Serializable
 data class ReviewKey(val itemId: String) : NavKey
+
+@Serializable
+data class DetailKey(val itemId: String) : NavKey
 
 @Serializable
 data object SettingsKey : NavKey
@@ -105,7 +109,7 @@ fun WheremyRoot(devRoute: String? = null, captureVm: CaptureViewModel = hiltView
             entry<GalleryKey> {
                 GalleryScreen(
                     inboxMode = false,
-                    onOpenItem = { itemId -> backStack.add(ReviewKey(itemId)) },
+                    onOpenItem = { itemId -> backStack.add(DetailKey(itemId)) },
                     onPickPhoto = launchPicker,
                     onOpenInbox = { switchTo(InboxKey) },
                     onOpenSettings = { switchTo(SettingsKey) },
@@ -114,10 +118,18 @@ fun WheremyRoot(devRoute: String? = null, captureVm: CaptureViewModel = hiltView
             entry<InboxKey> {
                 GalleryScreen(
                     inboxMode = true,
-                    onOpenItem = { itemId -> backStack.add(ReviewKey(itemId)) },
+                    onOpenItem = { itemId -> backStack.add(DetailKey(itemId)) },
                     onPickPhoto = launchPicker,
                     onOpenGallery = { switchTo(GalleryKey) },
                     onOpenSettings = { switchTo(SettingsKey) },
+                )
+            }
+            entry<DetailKey> {
+                // 格子上点一下进的是详情页；详情页自己没有可编辑字段，「编辑」才进确认页
+                DetailScreen(
+                    itemId = it.itemId,
+                    onBack = { backStack.removeLastOrNull() },
+                    onEdit = { itemId -> backStack.add(ReviewKey(itemId)) },
                 )
             }
             entry<ReviewKey> {

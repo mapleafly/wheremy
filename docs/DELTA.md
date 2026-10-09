@@ -157,6 +157,7 @@
 | **照片墙（有数据）** | 参照只有空态可拍（无数据） | `artifacts/screenshots/P3/device-wall-portrait.png`、`device-wall-filtered.png` | 本实现：两列自适应网格、名字 / 位置行（没位置写红字「待归类」）/ 到期行、⋮ 菜单、FAB、底栏 |
 | **待归类** | `REF/02-pending-empty.png`（空态逐字） | `device-inbox-portrait.png` | 同一个屏幕的 `inboxMode`；本实现已能列出"没位置或还是草稿"的件 |
 | **删除框** | 未采（参照需要造数据） | `device-delete-dialog.png` | 逐字对上 `RULES.md` §9.3 的第四档：「照片和记录会一起删除，无法恢复。」 |
+| **详情页** | 未采（参照需要造数据） | `artifacts/screenshots/P3/device-detail-portrait.png` | 名称在正文第一行（**不挂顶栏**）、位置卡（面包屑 + `#标签`）、字段卡只给有值的行、更新于日期；顶栏三颗全挂在 `summary != null` 上 |
 | **照片墙 · 横屏** | — | `device-gallery-populated-portrait.png`（横屏实拍） | **本实现的问题**：横屏只露图片、文字行被挤出可视区、FAB 压图 → 已入 P6 自适应清单（F21） |
 | 照片墙空态 | `artifacts/screenshots/REF/01-home-empty.png`（dump：`还没有物品。点右下角的按钮选第一张照片。`） | P2 才有 | 待比 |
 | 待归类空态 | `REF/02-pending-empty.png`（`没有待归类的物品，全都放好了。`） | P2 才有 | 待比 |

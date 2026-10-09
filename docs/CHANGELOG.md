@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-10-09 · P3 收口：详情页 + 点格子进详情（查找闭环完成）
+
+**触发**：用户"继续推进"。
+
+**交付**：
+
+| 文件 | 内容 |
+|---|---|
+| `ui/detail/DetailViewModel.kt` | `load`（带 `loadSeq` 守卫）、三态分开（`loading` / `missing` / `failed`）、`askDelete`+`confirmDelete`（**成功后只置 `deleted`，不 reload**）、`askMove`/`move`（搬完重读）、`consumeDeleted`/`consumeNotice` |
+| `ui/detail/DetailScreen.kt` | 顶栏（标题「物品详情」`maxLines=1`、左「返回」文字按钮、右三颗**全挂在 `summary != null`**）、三态互斥三句话、正文五块：名称（正文第一行、`ifBlank {"未命名物品"}`）→ 照片 `LazyRow`（200dp 1:1 `Crop`，没照片整块不给）→ 位置卡（`breadcrumb ?: "待归类（还没放好）"`，null 时加粗 + error 色；右边 `#tag`）→ 字段卡（**十行**：分类/季节/颜色/材质/品牌/别名/数量/到期/描述/备注；季节 CSV→顿号；数量仅 `n≠1`；`isNullOrBlank` 整行不给）→ 「更新于」；删完自己退屏（`consumeDeleted()` 再 `onBack()`） |
+| 外壳 | 新增 `DetailKey(itemId)`；**格子点一下进详情**（图与名字都可点），详情页「编辑」才进确认页 |
+
+**判绿双证**：**19 类 / 113 例**、`freshXml=19/19`、`failures=0 errors=0`、Spotless 通过。
+
+**真机验证**（截图 `artifacts/screenshots/P3/device-detail-portrait.png`）：点第一格进详情 → 名称/位置卡（`家 / 衣柜` + `#自检种子`）/字段卡（分类 衣物、季节 冬、颜色 深灰、品牌 Uniqlo，空行整行不见）/更新于 2026-10-09；顶栏四颗齐在；「搬到」对话框列出默认项「暂不归类，先进「待归类」」+ 位置候选，选 `家 / 抽屉` 后详情页位置卡**即时刷新**；全程无崩溃。
+
+**阶段状态**：`PLAN.md` §10 → P0 ✅、P1 ✅、P2 🟡（单件闭环；**AI 分析未接**）、**P3 ✅（查找闭环完成）**。
+P3 里两处故意留给后面：**照片来源弹窗**（`UI.md` §2.5，要等 P6 的相机）与**排序说明**（`PRD.md` ⬜ FR-FND-09）。
+
+**下一步**：P4 位置页（建/改/移/排序/删除门槛/位置照片，`UI.md` §4）——它是 `DELTA.md` 里唯一"参照有、我们还没有"的产品屏。
+
+---
+
 ## 2026-10-09 · P3 照片墙（搜索 / 三层筛选 / 待归类 / 删除四档文案）
 
 **触发**：用户"继续"。
