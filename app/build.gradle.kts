@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -9,6 +10,28 @@ plugins {
     alias(libs.plugins.roborazzi)
     alias(libs.plugins.spotless)
 }
+
+/**
+ * release 的签名配置从**仓库外**的一份 `keystore.properties` 读（`docs/KEYSTORE.md`）。
+ *
+ * 为什么在仓库外：那文件里有口令。`.gitignore` 只保证"不会误提交"，不等于"放这儿安全"。
+ * 找两处，按顺序：
+ *  1. 仓库旁边：`<仓库父目录>/keystore.properties`（推荐，好找又好备份）
+ *  2. 家目录：`~/.wheremy/keystore.properties`
+ *
+ * **找不到就退回调试签名**（今天的现状），并在真要出 release 包时喊一声——
+ * 免得有人以为手上那个包是正式签名的。
+ */
+val keystorePropertiesFile: File? =
+    listOf(
+        rootProject.file("../keystore.properties"),
+        File(System.getProperty("user.home"), ".wheremy/keystore.properties"),
+    ).firstOrNull { it.isFile }
+
+val keystoreProperties: Properties? =
+    keystorePropertiesFile?.let { file ->
+        Properties().apply { file.inputStream().use { load(it) } }
+    }
 
 android {
     namespace = "com.wheremy.app"
@@ -22,6 +45,24 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+    }
+
+    signingConfigs {
+        // 先把两个可空值收进非空局部变量：Kotlin 不会在嵌套 lambda 里智能转换
+        val props = keystoreProperties
+        val propsFile = keystorePropertiesFile
+        if (props != null && propsFile != null) {
+            create("release") {
+                // 相对路径按 properties 文件所在目录解析（写 `wheremy.jks` 就够了）
+                val raw = props.getProperty("storeFile").orEmpty()
+                val candidate = File(raw)
+                storeFile = if (candidate.isAbsolute) candidate else File(propsFile.parentFile, raw)
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                // PKCS12 里 key 口令与 store 口令是同一个，允许只写一个
+                keyPassword = props.getProperty("keyPassword") ?: props.getProperty("storePassword")
+            }
+        }
     }
 
     buildTypes {
@@ -38,9 +79,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // ⚠️ 只是给"R8 之后还跑得起来"做真机冒烟用的调试签名。
-            // 真正发布必须换成自己的 keystore（`RELEASE.md` §2），**不要**把这一行当成发布配置。
-            signingConfig = signingConfigs.getByName("debug")
+            // 有 keystore.properties 就用正式签名；没有就退回调试签名（只在真要出包时喊一声，
+            // 免得有人以为手上那个包是正式签名的）。做法与理由见 `docs/KEYSTORE.md`。
+            signingConfig =
+                if (keystoreProperties != null) {
+                    signingConfigs.getByName("release")
+                } else {
+                    signingConfigs.getByName("debug")
+                }
         }
         /**
          * R8 真机冒烟变体：规则与 release 完全一致，只多一个包名后缀。
@@ -163,4 +209,18 @@ dependencies {
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.accessibility.check)
+}
+
+// 真要出 release 包而又没配 keystore 时，明确喊一声（别让人以为它是正式签名的包）
+gradle.taskGraph.whenReady {
+    val assemblingRelease =
+        allTasks.any {
+            it.project == project && (it.name == "assembleRelease" || it.name == "bundleRelease")
+        }
+    if (assemblingRelease && keystoreProperties == null) {
+        logger.lifecycle(
+            "⚠️ release 用的是**调试签名**：没找到 keystore.properties。" +
+                "正式交付前请按 docs/KEYSTORE.md 生成自己的 keystore。",
+        )
+    }
 }

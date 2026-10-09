@@ -93,7 +93,8 @@
 
 **为什么必须**：release 现在**用调试签名**（`signingConfig = signingConfigs.getByName("debug")`），只够做"R8 之后还跑得起来"的真机冒烟；侧载给别人用的正式包必须有自己的 keystore。
 **怎么算做完**：① 生成 keystore（口令与别名**记在密码管理器里，不写进仓库、不写进任何文档**）；② keystore 放在**仓库之外**；③ 配 `signingConfigs` + `buildTypes.release.signingConfig`（把现在那行调试签名换掉）；④ `gradle :app:signingReport` 里 release 那段不再是 `Config: null`；⑤ `apksigner verify --print-certs` 核签名者；⑥ `git status` 干净，KE 仓库里没有 keystore。
-**本实现的情况**：⬜ **未完成，且需要用户参与**——keystore 的口令与保管是用户的决定，代理不生成、不代管。首次正式交付前必须做掉这一条。
+**本实现的情况**：⬜ **未完成，且需要用户参与**——keystore 的口令与保管是用户的决定，代理不生成、不代管。
+📖 **操作手册在 `KEYSTORE.md`**：从「生成 → 三份备份 → 写 `keystore.properties`（仓库外）→ 接进构建 → 三条验证命令 → 装机两个坑 → 换密钥不可逆」一条条写清，并附本次在本机用一把**一次性**密钥跑通整条链的实测记录。构建侧已经就绪：`app/build.gradle.kts` 会按顺序找 `<仓库父目录>/keystore.properties` 与 `~/.wheremy/keystore.properties`，**找不到就退回调试签名并在出 release 包时喊一声**——所以你把文件放好之后，不需要改任何代码。
 **谁签收**：软件经理（只有他知道 keystore 在哪）+ 架构师（配置）。
 
 ### 3.3 `isMinifyEnabled` 的处置
@@ -229,7 +230,7 @@
 |---|---|---|
 | 包名 | `com.wheremy.app.dsh`（与参照实现并存） | `com.wheremy.app` |
 | 混淆 | 无 | **R8 + 资源收缩**（keep 规则见 §3.3） |
-| 签名 | 自动 debug 签名 | **也暂时是 debug 签名**，只够冒烟；正式交付要换 keystore（⭐FR-RLS-01，§3.2） |
+| 签名 | 自动 debug 签名 | 有 `keystore.properties`（仓库外）就用你自己的 keystore，没有就暂时用 debug 签名（⭐FR-RLS-01，§3.2；做法见 `KEYSTORE.md`） |
 | 设置页 debug 区 | 有 | **没有**（`BuildConfig.DEBUG`） |
 | 体积 / 冷启动 | 17.4 MB / 926 ms（中位数） | 2.69 MB / **233 ms**（中位数，`.r8smoke` 同规则） |
 | 可降级安装 | 可以 | 不可以（§5.3） |
@@ -237,6 +238,8 @@
 **由此得出一条发布期的实话**：`SettingsScreen.kt:172-174` 的「调试：立刻检查一次到期提醒」与 `:260-267` 的「AI 留痕：N 条…」**只在 debug 包上出现**（`UI.md` §7.1 第 5 项、§7.2 第 6 项）。所以正式包上**不能**按一下立刻验提醒链路（只能等那一天自己到），也**看不到** AI 留痕那一行（要看只能连 adb 取 `files/ai-trace`，`AppContainer.kt:72`）。这句要写进发布记录，免得下一个人以为正式包上有这两样。
 
 ### 6.3 侧载步骤
+
+⚠️ **先读 `KEYSTORE.md` §7 的两个坑**：release 的包名 `com.wheremy.app` 与参照实现那个应用**同名**（覆盖安装会失败，强装要先卸载并丢数据），以及 `versionCode` 只能涨不能降。
 
 ```bash
 ADB=/d/Lib/Android/Sdk/platform-tools/adb.exe        # 不在 PATH，用绝对路径

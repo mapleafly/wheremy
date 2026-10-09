@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-10-10 · `docs/KEYSTORE.md`：生成与保管 release 密钥的操作手册（+ 构建侧签名就绪）
+
+**给用户的东西**：一份**照着敲就能做完**的文档，从"keystore 是什么、为什么必须自己生成"到
+"生成 → 三份备份 → 写 `keystore.properties` → 接进构建 → 三条验证命令 → 装机两个坑 → 换密钥不可逆"，
+附常见坑表与检查清单。**不是抄来的**：我在本机用一把**一次性**密钥把整条链跑通了两遍（含代码格式化之后再跑一遍），
+密钥放在 `%TEMP%`、验证完已删除，仓库里 `git status` 干净、零密钥文件。
+
+**构建侧（让用户少改代码）**：`app/build.gradle.kts` 现在会按顺序找两处配置，找到就用、找不到就**退回调试签名**并在真要出 release 包时**喊一声**：
+
+| 顺序 | 位置 |
+|---|---|
+| 1 | `<仓库父目录>/keystore.properties`（本机即 `D:\src\dsh\keystore.properties`，**仓库外**） |
+| 2 | `~/.wheremy/keystore.properties` |
+
+- `signingConfigs` 新增 `release`（`storeFile` 支持相对路径，按 properties 文件所在目录解析；PKCS12 下 `keyPassword` 缺省时自动用 `storePassword`）；
+- `buildTypes.release.signingConfig` 有配置就用正式签名、没有就用调试签名；
+- 末尾加了一句只在出 release 包时打印的提醒：`⚠️ release 用的是**调试签名**：没找到 keystore.properties。正式交付前请按 docs/KEYSTORE.md 生成自己的 keystore。`
+- `.gitignore` 补 `keystore.properties`（**推荐放仓库外**；这行只是防误提交）。
+
+**实测证据（本机，最终代码）**：`signingReport` 里 release 段 `Config: release`、`Store` 指向测试密钥；
+`assembleRelease` 出的包经 `apksigner verify --print-certs` 验签为 `CN=Wheremy Test…`（`SHA-256: 41cc6474…`）；
+删掉 `keystore.properties` 再出包 → 打印那句提醒并 `BUILD SUCCESSFUL`（回落到调试签名）。
+
+**文档接线**：`RELEASE.md` §3.2 指向手册（并写明"文件放好之后不需要改任何代码"）、§6.3 顶部加了装机两个坑的警告、
+§6.2 的签名行改成"有配置用你的、没有用 debug"；`docs/README.md` 文档地图新增 `KEYSTORE.md` 一行。
+
+**判绿双证**：**30 类 / 210 例**、`freshXml=30/30`、`failures=0 errors=0`、Spotless 通过（含 `build.gradle.kts` 的格式化）。
+
+---
+
 ## 2026-10-10 · `FR-CFG-06` 四套词表自定义（用户批准的首版六条**全部落地**）
 
 **做了什么**：

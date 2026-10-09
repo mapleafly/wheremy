@@ -27,5 +27,6 @@ artifacts/
 
 # 凭据：绝不提交
 app/secrets.json
+keystore.properties
 secrets.properties
 *.jks
