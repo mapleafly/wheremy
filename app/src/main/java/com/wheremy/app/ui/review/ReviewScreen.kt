@@ -1,8 +1,5 @@
 package com.wheremy.app.ui.review
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,7 +44,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -55,30 +51,36 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wheremy.app.data.repo.CATEGORIES
 import com.wheremy.app.data.repo.EXPIRE_KINDS
 import com.wheremy.app.data.repo.SEASONS
-import com.wheremy.app.ui.readJpeg
+import com.wheremy.app.ui.capture.CaptureViewModel
 import com.wheremy.app.ui.theme.WheremySpacing
 import java.io.File
 
-/**
- * 确认页（`UI.md` §6 / `RULES.md` §5–§6）。
- *
- * 这一屏的每一句话都是**逐字契约**：顶栏三颗按钮、芯片标签、退出框两支的标题与正文，
- * 都不许"顺手改通顺"。改文案要连测试一起改（`PROCESS.md` §3.4）。
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ReviewScreen(onDone: () -> Unit, vm: ReviewViewModel = hiltViewModel()) {
+fun ReviewScreen(
+    /** 要打开/编辑的那一件；外壳把它一路带进来（`UI.md` §2.7 的三分派之一） */
+    itemId: String?,
+    onDone: () -> Unit,
+    /** 外壳那一格的显影槽：录入页开着时换一张走它（同一个 itemId，填过的字段都留着） */
+    captureVm: CaptureViewModel,
+    /** 「换一张」也走外壳那颗来源弹窗（拍照 / 相册），与 FAB 同一个收口 */
+    onReplacePhoto: () -> Unit,
+    vm: ReviewViewModel = hiltViewModel(),
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val options by vm.locationOptions.collectAsStateWithLifecycle()
-    val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
 
     var locationDialog by remember { mutableStateOf(false) }
     var expireDialog by remember { mutableStateOf(false) }
     var addTagText by remember { mutableStateOf("") }
 
-    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) readJpeg(context, uri)?.let(vm::replacePhoto)
+    // ⚠️ 少了这一步就是"顶栏画出来了、正文一片空白"：照片刚落库、itemId 已经在手上，
+    // 但槽位要靠 start(itemId) 读出来（真机上踩到过）
+    LaunchedEffect(itemId) { itemId?.let(vm::start) }
+
+    LaunchedEffect(captureVm) {
+        captureVm.replacements.collect { vm.replacePhoto(it) }
     }
 
     LaunchedEffect(Unit) { vm.loadLocationOptions() }
@@ -156,11 +158,7 @@ fun ReviewScreen(onDone: () -> Unit, vm: ReviewViewModel = hiltViewModel()) {
             PhotoArea(
                 thumbPath = cur.thumbPath,
                 hasStoredItem = state.slots.any { it.itemId != null },
-                onPick = {
-                    photoPicker.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                    )
-                },
+                onPick = onReplacePhoto,
             )
 
             AiStatusLine(state = state)

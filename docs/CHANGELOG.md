@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-10-09 · P6 前半：相机取景 + 照片来源弹窗（补上 P3 欠的那一处）
+
+**交付**：
+
+| 文件 | 内容 |
+|---|---|
+| `ui/camera/CameraGate.kt` | `Unavailable` / `NeedsPermission` / `Ready` 三态，**现算**（硬件 + 运行时权限）；外壳在 `ON_RESUME` 时重读 |
+| `ui/camera/CameraScreen.kt` | 中栏三态（「这台机器没有可用的相机」/「取景要用相机，先给它授权」+「打开相机权限」/ 预览槽）、失败行「没拍到，再按一次，或者改用相册」（仅 `missed`，error 色）、底行「取消」/ 仅 `Ready` 给「拍这张」且 `enabled = !busy`/「改用相册选」**常驻**；背景不透明；**这一屏不认识 `PreviewView`**（预览面由外壳填 `preview` 槽） |
+| `ui/camera/CameraSession.kt` | CameraX：`PreviewView` + `ImageCapture` 绑 `LifecycleOwner`，快门从 `ImageProxy` 直接取 JPEG 字节（不落临时文件），离开组合自动 `unbindAll` |
+| 外壳 | **照片来源弹窗**（标题「这张照片从哪来？」+ 正文逐字 + 「拍照」/「从相册选」）；`deliverPhoto` **唯一收口**四条分支（空字节→说「读不到这张照片，换一张试试」；`LOCATION`→位置照片；确认页开着→显影槽 `replaceWith`；其余→新建）；`startAlbum`/`openViewfinder` 各写一次 `photoTarget`；返回键优先级第 1 条用 **`BackHandler`** 显式接住 |
+| 接线 | 位置页的位置照片改走来源弹窗（`TreeViewModel` 提到外壳）；确认页的「换一张」也走来源弹窗 + 那一格显影槽（同一个 `itemId`，填过的字段都留着） |
+| 构建 | CameraX 1.5.3（core/camera2/lifecycle/view）；`CAMERA` 权限 + `uses-feature required=false`（没相机的机器其余功能照用） |
+
+**判绿双证**：**26 类 / 172 例**（新增 `CameraGateTest` 4 条 + `CameraScreenTest` 6 条界面测试）、`freshXml=26/26`、`failures=0 errors=0`、Spotless 通过。
+
+**真机验证**（截图 `artifacts/screenshots/P6/`）：
+1. FAB → 来源弹窗**逐字**（「这张照片从哪来？」/「拍照就在 Wheremy 里取景，按下快门才拍；它只要相机权限，不进相册。」/「从相册选」/「拍照」）。
+2. 选「拍照」→ 取景屏 `NeedsPermission`：「取景要用相机，先给它授权」+「打开相机权限」+「取消」+「改用相册选」，**进门自动弹系统权限框**（「允许"Wheremy"拍摄照片或录制视频？」）。
+3. 允许后进 `Ready`（「取消 | 拍这张 | 改用相册选」）+ 实时预览（截图 4.27 MB，是真实取景画面）。
+4. 取景屏里按**返回键只关掉取景屏**、留在本应用（修之前会直接退出、还露出底下那个应用）。
+5. 「拍这张」→ 进确认页；**详情页 →「编辑」**这条更可靠的路复验确认页：名称/分类/季节/颜色/品牌全部在位。
+
+**三条新发现（`PLAN.md` §3.4 F29–F31）**：
+- **F29**：给外壳补 `SnackbarHost` 时顺手加的 `Scaffold` 把自己盖在 `NavDisplay` 上 → **整屏白屏**（真机截图一眼看出）。
+- **F30**：`NavDisplay(onBack=…)` **只在栈深 > 1 时才拦**，所以叠在栈底那一屏上的取景屏按返回没人接 → 直接退出应用。补显式 `BackHandler`。
+- **F31**：确认页打开后**从不 `start(itemId)`** → 顶栏在、正文空白。P2 那次验证走的是自检屏的程序化路径，没覆盖这个界面集成点。
+
+**阶段状态**：`PLAN.md` §10 → P0 ✅、P1 ✅、P2 🟡（AI 未接）、P3 ✅、P4 ✅、P5 ✅、**P6 🟡（相机已通）**。
+
+**下一步**：P6 后半——无障碍（`accessibility-check` 跑一遍 + 触摸目标 + 文案朗读）、自适应（横屏/平板，含 F21：横屏照片墙只露图、FAB 压图）、Roborazzi 截图回归进 CI、发布准备（签名、版本号、`RELEASE.md` 检查单）。
+
+---
+
 ## 2026-10-09 · P5 收口：备份导出 / 导入（含四条拒与 MERGE/OVERWRITE）
 
 **交付**：

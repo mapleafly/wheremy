@@ -1,8 +1,5 @@
 package com.wheremy.app.ui.tree
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -53,7 +50,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.wheremy.app.data.repo.ItemSummary
-import com.wheremy.app.ui.readJpeg
 import com.wheremy.app.ui.theme.WheremySpacing
 import java.io.File
 
@@ -67,6 +63,8 @@ import java.io.File
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TreeScreen(
+    /** 位置照片走外壳那颗来源弹窗（拍照 / 相册） */
+    onAskForLocationPhoto: () -> Unit,
     onOpenGallery: () -> Unit,
     onOpenInbox: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -83,10 +81,6 @@ fun TreeScreen(
             snackbar.showSnackbar(it)
             vm.consumeNotice()
         }
-    }
-
-    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) readJpeg(context, uri)?.let(vm::setPhoto)
     }
 
     Scaffold(
@@ -138,11 +132,7 @@ fun TreeScreen(
                 item {
                     LocationPhotoArea(
                         photoPath = state.locationPhotoPath,
-                        onPick = {
-                            photoPicker.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                            )
-                        },
+                        onPick = onAskForLocationPhoto,
                         onClear = vm::clearPhoto,
                     )
                 }
