@@ -154,6 +154,10 @@
 | **设计系统画廊**（P0，开发期样本） | 无此屏 | `device-gallery-portrait-light.png`、`device-gallery-landscape-light.png` + Roborazzi `design-gallery-{light,dark}.png` | token/组件已可视化，可作后续每屏的样式基准 |
 | **数据层自检**（P1，开发期脚手架） | 无此屏 | `artifacts/screenshots/P1/device-selfcheck-portrait.png` | P1 的 7 项真机自检结果上屏，替代"口头说跑过了" |
 | **P2 闭环自检**（P2，开发期脚手架） | 无此屏 | `artifacts/screenshots/P2/device-selfcheck-p2.png` | 10 项真机自检（P2 六项 + P1 四项）；用**合成照片**跑，不碰相册里的私人照片 |
+| **照片墙（有数据）** | 参照只有空态可拍（无数据） | `artifacts/screenshots/P3/device-wall-portrait.png`、`device-wall-filtered.png` | 本实现：两列自适应网格、名字 / 位置行（没位置写红字「待归类」）/ 到期行、⋮ 菜单、FAB、底栏 |
+| **待归类** | `REF/02-pending-empty.png`（空态逐字） | `device-inbox-portrait.png` | 同一个屏幕的 `inboxMode`；本实现已能列出"没位置或还是草稿"的件 |
+| **删除框** | 未采（参照需要造数据） | `device-delete-dialog.png` | 逐字对上 `RULES.md` §9.3 的第四档：「照片和记录会一起删除，无法恢复。」 |
+| **照片墙 · 横屏** | — | `device-gallery-populated-portrait.png`（横屏实拍） | **本实现的问题**：横屏只露图片、文字行被挤出可视区、FAB 压图 → 已入 P6 自适应清单（F21） |
 | 照片墙空态 | `artifacts/screenshots/REF/01-home-empty.png`（dump：`还没有物品。点右下角的按钮选第一张照片。`） | P2 才有 | 待比 |
 | 待归类空态 | `REF/02-pending-empty.png`（`没有待归类的物品，全都放好了。`） | P2 才有 | 待比 |
 | 设置页（三节） | `REF/03-settings.png`（`到期提醒` 提前 3 天/当天…一年、`还缺 API key…`、`接口地址 base_url`） | P5 才有 | 待比 |

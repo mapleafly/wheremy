@@ -58,10 +58,6 @@ import com.wheremy.app.data.repo.SEASONS
 import com.wheremy.app.ui.readJpeg
 import com.wheremy.app.ui.theme.WheremySpacing
 import java.io.File
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 /**
  * 确认页（`UI.md` §6 / `RULES.md` §5–§6）。
@@ -341,14 +337,8 @@ private fun ReviewSlot.chipLabel(index: Int): String {
 
 private fun ReviewSlot.expireLabel(): String {
     val expiresAt = draft.expiresAt ?: return "未设置"
-    val date = Instant.ofEpochMilli(expiresAt).atZone(ZoneId.systemDefault()).toLocalDate()
-    val days = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), date)
-    val hint = when {
-        days < 0 -> "已经过期 ${-days} 天"
-        days == 0L -> "就是今天"
-        else -> "还剩 $days 天"
-    }
-    return "${draft.expireKind ?: "到期"} · ${date.format(DateTimeFormatter.ISO_LOCAL_DATE)}（$hint）"
+    // 整句由 UiFormat 生成：照片墙、详情页、这里三处用的是同一句
+    return com.wheremy.app.ui.UiFormat.expireLine(draft.expireKind, expiresAt)
 }
 
 @Composable
@@ -539,10 +529,6 @@ private fun ExitDialog(state: ReviewUiState, vm: ReviewViewModel) {
     )
 }
 
-/** UTC 零点毫秒 → 本地零点毫秒。 */
-private fun utcMillisToLocalStartOfDay(utcMillis: Long): Long = Instant.ofEpochMilli(utcMillis)
-    .atZone(ZoneId.of("UTC"))
-    .toLocalDate()
-    .atStartOfDay(ZoneId.systemDefault())
-    .toInstant()
-    .toEpochMilli()
+/** UTC 零点毫秒 → 本地零点毫秒（唯一实现在 `util/Dates.kt`）。 */
+private fun utcMillisToLocalStartOfDay(utcMillis: Long): Long =
+    com.wheremy.app.util.utcMillisToLocalStartOfDay(utcMillis)

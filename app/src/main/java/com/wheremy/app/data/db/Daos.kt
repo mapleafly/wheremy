@@ -50,8 +50,15 @@ interface ItemDao {
     @Query("SELECT * FROM item WHERE id = :id")
     suspend fun byId(id: String): ItemEntity?
 
-    /** 全量（照片墙在空 query 时走这条）。 */
-    @Query("SELECT * FROM item ORDER BY updatedAt DESC")
+    /**
+     * 全量（照片墙在空 query 时走这条）。
+     *
+     * 🔒 **故意没有 `ORDER BY`**（`RULES.md` §10.1）：SQLite 按 rowid 升序返回 = 插入先后，
+     * 而 `@Upsert` 按主键原地更新、不改 rowid，所以**编辑一件物品不会把它挪到前面**。
+     * 想当然加上 `ORDER BY updatedAt DESC` 会改掉用户已经习惯的卡片次序，
+     * 也会让"屏幕上第 N 格是谁"这种对账失效（`REBUILD.md` §7 C 组的事故就靠这个次序核对）。
+     */
+    @Query("SELECT * FROM item")
     suspend fun all(): List<ItemEntity>
 
     @Delete

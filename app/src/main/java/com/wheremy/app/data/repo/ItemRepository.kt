@@ -228,7 +228,15 @@ class ItemRepository(
 
     suspend fun atLocation(locationId: String): List<ItemEntity> = itemDao.atLocation(locationId)
 
-    suspend fun allTags(): List<String> = itemDao.allTags()
+    /**
+     * 筛选芯片那一排的标签。
+     *
+     * SQL 是 `SELECT DISTINCT tag … ORDER BY tag COLLATE NOCASE`（BINARY 序），而 `DISTINCT` **分大小写**，
+     * 所以仓库层再补一次 `distinctBy { lowercase() }`：库里同时有 "MacBook" 与 "macbook" 时只留一颗芯片，
+     * 点下去两件都出来（`itemIdsWithTag` 用 `LOWER` 比）。
+     * ⚠️ 卡片上列出的标签走 `tagsFor`，**不做大小写合并**——那两处口径别统一成一处。
+     */
+    suspend fun allTags(): List<String> = itemDao.allTags().distinctBy { it.lowercase() }
 
     suspend fun photosOf(itemId: String): List<ItemPhotoEntity> = photoDao.forOwner(PhotoOwner.ITEM, itemId)
 
@@ -279,16 +287,27 @@ class ItemRepository(
         return changed
     }
 
-    /** 删除确认框要的三个数。 */
+    /**
+     * 删除确认框要的三个数（`RULES.md` §9.3）。
+     * 原图与缩略图**两条路径都要问**，每类主人取 **max 而不是 sum**——
+     * 问的是"最多还有几个人共用"，不是"几个路径上各有几个人"。
+     */
     suspend fun photoDeletionOf(itemId: String): PhotoDeletion {
         val photo = photoDao.forOwner(PhotoOwner.ITEM, itemId).firstOrNull()
             ?: return PhotoDeletion(hasPhoto = false, otherItems = 0, otherOwners = 0)
-        val others = photoDao.otherOwnersOnPath(PhotoOwner.ITEM, itemId, photo.filePath)
-        return PhotoDeletion(
-            hasPhoto = true,
-            otherItems = others.firstOrNull { it.ownerType == PhotoOwner.ITEM }?.owners ?: 0,
-            otherOwners = others.firstOrNull { it.ownerType == PhotoOwner.LOCATION }?.owners ?: 0,
-        )
+
+        var otherItems = 0
+        var otherOwners = 0
+        listOf(photo.filePath, photo.thumbPath).filter { it.isNotBlank() }.forEach { path ->
+            photoDao.otherOwnersOnPath(PhotoOwner.ITEM, itemId, path).forEach { row ->
+                if (row.ownerType == PhotoOwner.ITEM) {
+                    otherItems = maxOf(otherItems, row.owners)
+                } else {
+                    otherOwners = maxOf(otherOwners, row.owners)
+                }
+            }
+        }
+        return PhotoDeletion(hasPhoto = true, otherItems = otherItems, otherOwners = otherOwners)
     }
 
     /** 删除：**先删三处行，再按引用计数删文件**。顺序反了会留下无人认领的字节。 */
