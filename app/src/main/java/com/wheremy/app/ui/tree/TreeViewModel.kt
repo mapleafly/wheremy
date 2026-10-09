@@ -7,6 +7,7 @@ import com.wheremy.app.data.repo.ItemSummary
 import com.wheremy.app.data.repo.LOCATION_KINDS
 import com.wheremy.app.data.repo.LocationNotEmptyException
 import com.wheremy.app.data.repo.LocationRepository
+import com.wheremy.app.data.settings.SettingsRepository
 import com.wheremy.app.domain.LocationNode
 import com.wheremy.app.domain.buildLocationTree
 import com.wheremy.app.ui.gallery.MoveOption
@@ -65,8 +66,11 @@ data class TreeUiState(
  * 树规则全在 `LocationRepository`/`LocationTree` 里（同级重排、防环、删除门槛），这里只管状态。
  */
 @HiltViewModel
-class TreeViewModel @Inject constructor(private val locations: LocationRepository, private val items: ItemRepository) :
-    ViewModel() {
+class TreeViewModel @Inject constructor(
+    private val locations: LocationRepository,
+    private val items: ItemRepository,
+    private val settings: SettingsRepository,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(TreeUiState())
     val state: StateFlow<TreeUiState> = _state.asStateFlow()
@@ -75,6 +79,12 @@ class TreeViewModel @Inject constructor(private val locations: LocationRepositor
 
     init {
         refresh()
+        // 位置类型的候选读生效词表（FR-CFG-06）
+        viewModelScope.launch {
+            settings.changes.collect { saved ->
+                _state.update { it.copy(kinds = saved.locationKinds.ifEmpty { LOCATION_KINDS }) }
+            }
+        }
     }
 
     /** 每次进入本页（含从详情页返回）都要刷新：详情页可能刚搬走或删掉物品。 */

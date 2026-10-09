@@ -48,9 +48,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.wheremy.app.data.repo.CATEGORIES
-import com.wheremy.app.data.repo.EXPIRE_KINDS
-import com.wheremy.app.data.repo.SEASONS
 import com.wheremy.app.ui.UiFormat
 import com.wheremy.app.ui.capture.CaptureViewModel
 import com.wheremy.app.ui.theme.WheremySpacing
@@ -69,6 +66,8 @@ fun ReviewScreen(
     vm: ReviewViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    // 生效词表（FR-CFG-06）：用户改过就用用户那份，芯片行与提示词读同一份
+    val wordLists by vm.wordLists.collectAsStateWithLifecycle()
     val options by vm.locationOptions.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
 
@@ -175,7 +174,7 @@ fun ReviewScreen(
             )
 
             ChipRow("分类") {
-                CATEGORIES.forEach { category ->
+                wordLists.categories.forEach { category ->
                     FilterChip(
                         selected = cur.draft.category == category,
                         onClick = { vm.setCategory(if (cur.draft.category == category) null else category) },
@@ -185,7 +184,7 @@ fun ReviewScreen(
             }
 
             ChipRow("季节") {
-                SEASONS.forEach { season ->
+                wordLists.seasons.forEach { season ->
                     FilterChip(
                         selected = season in cur.draft.seasons,
                         onClick = { vm.toggleSeason(season) },
@@ -311,6 +310,7 @@ fun ReviewScreen(
         ExpireDialog(
             initial = cur?.draft?.expiresAt,
             initialKind = cur?.draft?.expireKind,
+            expireKinds = wordLists.expireKinds,
             onConfirm = { millis, kind ->
                 vm.setExpire(millis, kind)
                 expireDialog = false
@@ -475,6 +475,7 @@ private fun LocationPickerDialog(
 private fun ExpireDialog(
     initial: Long?,
     initialKind: String?,
+    expireKinds: List<String>,
     onConfirm: (Long, String?) -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
@@ -498,7 +499,7 @@ private fun ExpireDialog(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
             Row(horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
-                EXPIRE_KINDS.forEach { option ->
+                expireKinds.forEach { option ->
                     FilterChip(
                         selected = kind == option,
                         onClick = { kind = option },

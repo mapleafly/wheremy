@@ -61,6 +61,7 @@ import com.wheremy.app.ui.capture.CaptureViewModel
 import com.wheremy.app.ui.debug.BackupSmokeScreen
 import com.wheremy.app.ui.debug.DataSelfCheckScreen
 import com.wheremy.app.ui.debug.DevSeedScreen
+import com.wheremy.app.ui.debug.WordListSmokeScreen
 import com.wheremy.app.ui.design.DesignGalleryScreen
 import com.wheremy.app.ui.detail.DetailScreen
 import com.wheremy.app.ui.gallery.GalleryScreen
@@ -108,6 +109,9 @@ data object DataSelfCheckKey : NavKey
 @Serializable
 data object BackupSmokeKey : NavKey
 
+/** 开发期：词表冒烟（FR-CFG-06 的真机验证入口） */
+data object WordListSmokeKey : NavKey
+
 /**
  * 照片的两个来源（`UI.md` §2.5）。`NONE` 表示没有在等照片。
  */
@@ -133,6 +137,7 @@ fun WheremyRoot(
         "design" -> DesignGalleryKey
         "seed" -> DevSeedKey
         "backupcheck" -> BackupSmokeKey
+        "words" -> WordListSmokeKey
         else -> GalleryKey
     }
     val backStack = remember { mutableStateListOf(start) }
@@ -361,6 +366,9 @@ fun WheremyRoot(
                     }
                     entry<BackupSmokeKey> {
                         BackupSmokeScreen(onBack = { backStack.removeLastOrNull() })
+                    }
+                    entry<WordListSmokeKey> {
+                        WordListSmokeScreen(onBack = { backStack.removeLastOrNull() })
                     }
                     entry<DevSeedKey> {
                         DevSeedScreen(onDone = { switchTo(GalleryKey) })

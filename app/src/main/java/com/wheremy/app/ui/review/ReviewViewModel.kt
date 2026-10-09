@@ -6,8 +6,14 @@ import com.wheremy.app.data.ai.AnalysisOutcome
 import com.wheremy.app.data.ai.ApiPhotoAnalyzer
 import com.wheremy.app.data.ai.FailureReason
 import com.wheremy.app.data.ai.Prompt
+import com.wheremy.app.data.repo.CATEGORIES
+import com.wheremy.app.data.repo.EXPIRE_KINDS
 import com.wheremy.app.data.repo.ItemRepository
+import com.wheremy.app.data.repo.LOCATION_KINDS
 import com.wheremy.app.data.repo.LocationRepository
+import com.wheremy.app.data.repo.SEASONS
+import com.wheremy.app.data.settings.SettingsRepository
+import com.wheremy.app.data.settings.WordLists
 import com.wheremy.app.domain.CaptureFlow
 import com.wheremy.app.domain.LocationPath
 import com.wheremy.app.domain.SuggestLocationUseCase
@@ -32,7 +38,25 @@ class ReviewViewModel @Inject constructor(
     private val locations: LocationRepository,
     private val captureFlow: CaptureFlow,
     private val analyzer: ApiPhotoAnalyzer,
+    private val settings: SettingsRepository,
 ) : ViewModel() {
+
+    /**
+     * 生效的四套词表（`FR-CFG-06`）：用户改过就用用户那份，没改过就是代码里的预设。
+     * 芯片行与**提示词**都读它——两处各读一份迟早会分叉。
+     */
+    private val _wordLists = MutableStateFlow(
+        WordLists(CATEGORIES, SEASONS, EXPIRE_KINDS, LOCATION_KINDS),
+    )
+    val wordLists: StateFlow<WordLists> = _wordLists.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            settings.changes.collect { saved ->
+                _wordLists.value = saved.wordLists(CATEGORIES, SEASONS, EXPIRE_KINDS, LOCATION_KINDS)
+            }
+        }
+    }
 
     private val _state = MutableStateFlow(ReviewUiState())
     val state: StateFlow<ReviewUiState> = _state.asStateFlow()
@@ -111,7 +135,12 @@ class ReviewViewModel @Inject constructor(
                     depth = tree.pathOf(node.id).size - 1,
                 )
             }
-        val prompt = Prompt.build(selectable.map { it.path })
+        // 发出去的那份与留痕里的那份是同一串字；词表用用户生效的那份（FR-CFG-06）
+        val prompt = Prompt.build(
+            categories = _wordLists.value.categories,
+            seasons = _wordLists.value.seasons,
+            locationPaths = selectable.map { it.path },
+        )
 
         when (val outcome = analyzer.analyze(jpeg, prompt)) {
             is AnalysisOutcome.Failure ->

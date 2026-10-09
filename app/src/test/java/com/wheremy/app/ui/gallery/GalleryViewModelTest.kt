@@ -11,6 +11,7 @@ import com.wheremy.app.data.photos.PhotoStore
 import com.wheremy.app.data.repo.ItemDraft
 import com.wheremy.app.data.repo.ItemRepository
 import com.wheremy.app.data.repo.LocationRepository
+import com.wheremy.app.data.settings.testSettings
 import com.wheremy.app.data.testJpeg
 import com.wheremy.app.util.expireWindowEnd
 import com.wheremy.app.util.localStartOfDay
@@ -70,9 +71,10 @@ class GalleryViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun gallery(inboxMode: Boolean = false): GalleryViewModel = GalleryViewModel(items, locations).also {
-        it.setInboxMode(inboxMode)
-    }
+    private fun gallery(inboxMode: Boolean = false): GalleryViewModel =
+        GalleryViewModel(items, locations, testSettings()).also {
+            it.setInboxMode(inboxMode)
+        }
 
     private fun awaitRows(
         vm: GalleryViewModel,

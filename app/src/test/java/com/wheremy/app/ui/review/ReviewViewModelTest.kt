@@ -10,6 +10,7 @@ import com.wheremy.app.data.db.WheremyDatabase
 import com.wheremy.app.data.photos.PhotoStore
 import com.wheremy.app.data.repo.ItemRepository
 import com.wheremy.app.data.repo.LocationRepository
+import com.wheremy.app.data.settings.testSettings
 import com.wheremy.app.data.testJpeg
 import com.wheremy.app.domain.CaptureFlow
 import kotlinx.coroutines.Dispatchers
@@ -71,6 +72,8 @@ class ReviewViewModelTest {
             locations,
             flow,
             ApiPhotoAnalyzer({ null }, AnalysisTrace(File(tmp.root, "ai-trace"))),
+            // 词表用内存版设置（FR-CFG-06）：测试里就是预设
+            testSettings(),
         )
     }
 

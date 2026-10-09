@@ -2,10 +2,13 @@ package com.wheremy.app.ui.gallery
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wheremy.app.data.repo.CATEGORIES
 import com.wheremy.app.data.repo.Filters
 import com.wheremy.app.data.repo.ItemRepository
 import com.wheremy.app.data.repo.ItemSummary
 import com.wheremy.app.data.repo.LocationRepository
+import com.wheremy.app.data.repo.SEASONS
+import com.wheremy.app.data.settings.SettingsRepository
 import com.wheremy.app.ui.PendingDelete
 import com.wheremy.app.ui.UiFormat
 import com.wheremy.app.util.expireWindowEnd
@@ -34,6 +37,9 @@ data class GalleryUiState(
     val moveFor: String? = null,
     val pendingDelete: PendingDelete? = null,
     val loading: Boolean = true,
+    /** 筛选芯片的生效词表（`FR-CFG-06`）：用户改过就用用户那份。 */
+    val categories: List<String> = CATEGORIES,
+    val seasons: List<String> = SEASONS,
     /** 这次是不是被 `LIMIT 300` 截了（FR-FND-07）：被截了就得说出来，不能假装这就是全部。 */
     val capped: Boolean = false,
 ) {
@@ -69,6 +75,7 @@ data class GalleryUiState(
 class GalleryViewModel @Inject constructor(
     private val items: ItemRepository,
     private val locations: LocationRepository,
+    private val settings: SettingsRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(GalleryUiState())
@@ -84,6 +91,17 @@ class GalleryViewModel @Inject constructor(
 
     init {
         refresh()
+        // 筛选芯片读生效词表（FR-CFG-06）：改完词表回到照片墙就该看到新芯片
+        viewModelScope.launch {
+            settings.changes.collect { saved ->
+                _state.update {
+                    it.copy(
+                        categories = saved.categories.ifEmpty { CATEGORIES },
+                        seasons = saved.seasons.ifEmpty { SEASONS },
+                    )
+                }
+            }
+        }
     }
 
     fun refresh() {

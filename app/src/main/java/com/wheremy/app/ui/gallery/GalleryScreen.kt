@@ -50,10 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
-import com.wheremy.app.data.repo.CATEGORIES
 import com.wheremy.app.data.repo.ItemRepository
 import com.wheremy.app.data.repo.ItemSummary
-import com.wheremy.app.data.repo.SEASONS
 import com.wheremy.app.ui.UiFormat
 import com.wheremy.app.ui.theme.WheremySpacing
 import com.wheremy.app.util.daysUntil
@@ -251,7 +249,7 @@ private fun FilterBar(state: GalleryUiState, expanded: Boolean, onToggleExpanded
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm),
         ) {
-            CATEGORIES.forEach { category ->
+            state.categories.forEach { category ->
                 FilterChip(
                     selected = state.filters.category == category,
                     onClick = { vm.toggleCategory(category) },
@@ -285,7 +283,7 @@ private fun FilterBar(state: GalleryUiState, expanded: Boolean, onToggleExpanded
                     )
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
-                    SEASONS.forEach { season ->
+                    state.seasons.forEach { season ->
                         FilterChip(
                             selected = state.filters.season == season,
                             onClick = { vm.toggleSeason(season) },

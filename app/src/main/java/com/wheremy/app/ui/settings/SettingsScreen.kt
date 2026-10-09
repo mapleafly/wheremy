@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wheremy.app.data.backup.ImportMode
 import com.wheremy.app.data.settings.SettingsRepository
+import com.wheremy.app.data.settings.WordListKind
 import com.wheremy.app.ui.theme.WheremySpacing
 import java.time.LocalDate
 
@@ -294,6 +295,31 @@ fun SettingsScreen(
                     Text("应用已被系统设置为不做云备份（allowBackup=false），导出是你唯一的迁移手段。")
                 }
             }
+
+            // —— 7.4 词表（FR-CFG-06）——
+            Text("词表", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "四套词表都可以改成你自己的叫法：分隔符用顿号、逗号或空格都行。" +
+                    "清空某一套再保存 = 回到默认。改词表不会动已有数据——已经用过某个叫法的物品，详情页里照旧原样显示。",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            WordListKind.entries.forEach { kind ->
+                Column(verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs)) {
+                    OutlinedTextField(
+                        value = state.wordDrafts[kind].orEmpty(),
+                        onValueChange = { vm.setWordDraft(kind, it) },
+                        label = { Text(kind.label) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("word_list_${kind.name.lowercase()}"),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
+                        OutlinedButton(onClick = { vm.saveWordList(kind) }) { Text("保存「${kind.label}」") }
+                    }
+                }
+            }
+            OutlinedButton(onClick = vm::resetWordLists) { Text("四套词表全部恢复默认") }
+            state.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 
             // —— 开发期入口（产品正式版里会随 debug 工具一起摘掉） ——
             Card {

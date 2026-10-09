@@ -40,6 +40,85 @@ class SettingsRepositoryTest {
     /** 每次新建仓储 = 重新进设置页；同一个 store 保证能看到已写入的值。 */
     private fun repo(): SettingsRepository = SettingsRepository(store)
 
+    /**
+     * FR-CFG-06：四套词表。
+     *
+     * 三条要点：**默认是空的**（空 = 用代码里的预设，所以"没改过"和"改回默认"是同一件事）、
+     * **写入侧就清洗**（去空白/丢空项/去重/封顶）、**清空 = 回到预设**。
+     */
+    @Test
+    fun `词表默认是空的，等于用预设`() {
+        runBlocking {
+            val settings = repo().current()
+            assertEquals(emptyList<String>(), settings.categories)
+            assertEquals(emptyList<String>(), settings.seasons)
+            assertEquals(emptyList<String>(), settings.expireKinds)
+            assertEquals(emptyList<String>(), settings.locationKinds)
+
+            val effective = repo().wordLists(
+                presetCategories = listOf("衣物", "数码"),
+                presetSeasons = listOf("春", "夏"),
+                presetExpireKinds = listOf("保质期"),
+                presetLocationKinds = listOf("抽屉"),
+            )
+            assertEquals("没存过就用预设", listOf("衣物", "数码"), effective.categories)
+            assertEquals(listOf("春", "夏"), effective.seasons)
+        }
+    }
+
+    @Test
+    fun `改一套词表之后按存的来，其余仍用预设`() {
+        runBlocking {
+            repo().setWordList(WordListKind.CATEGORIES, listOf("手办", " 模型 ", "手办", "", "   "))
+            val settings = repo().current()
+            assertEquals("去空白、丢空项、去重", listOf("手办", "模型"), settings.categories)
+
+            val effective = repo().wordLists(
+                presetCategories = listOf("衣物", "数码"),
+                presetSeasons = listOf("春", "夏"),
+                presetExpireKinds = listOf("保质期"),
+                presetLocationKinds = listOf("抽屉"),
+            )
+            assertEquals("改过的那套用存的", listOf("手办", "模型"), effective.categories)
+            assertEquals("没改的仍是预设", listOf("春", "夏"), effective.seasons)
+        }
+    }
+
+    @Test
+    fun `词表封顶二十四项`() {
+        runBlocking {
+            repo().setWordList(WordListKind.CATEGORIES, (1..40).map { "第$it" })
+            assertEquals(WordLists.MAX_ITEMS, repo().current().categories.size)
+        }
+    }
+
+    @Test
+    fun `清空一套等于回到预设`() {
+        runBlocking {
+            repo().setWordList(WordListKind.SEASONS, listOf("旱季", "雨季"))
+            assertEquals(listOf("旱季", "雨季"), repo().current().seasons)
+
+            repo().setWordList(WordListKind.SEASONS, emptyList())
+            assertEquals("清空之后又变回空（= 用预设）", emptyList<String>(), repo().current().seasons)
+        }
+    }
+
+    @Test
+    fun `恢复默认把四套一起清掉`() {
+        runBlocking {
+            repo().setWordList(WordListKind.CATEGORIES, listOf("手办"))
+            repo().setWordList(WordListKind.SEASONS, listOf("旱季"))
+            repo().setWordList(WordListKind.EXPIRE_KINDS, listOf("借期"))
+            repo().setWordList(WordListKind.LOCATION_KINDS, listOf("车库"))
+
+            repo().resetWordLists()
+
+            val after = repo().current()
+            assertTrue("四套都该回到空", after.categories.isEmpty() && after.seasons.isEmpty())
+            assertTrue(after.expireKinds.isEmpty() && after.locationKinds.isEmpty())
+        }
+    }
+
     @Test
     fun `默认值`() {
         val settings = runBlocking { repo().current() }

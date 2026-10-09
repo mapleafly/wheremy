@@ -8,7 +8,13 @@ import com.wheremy.app.data.backup.BackupRepository
 import com.wheremy.app.data.backup.BackupSummary
 import com.wheremy.app.data.backup.ImportMode
 import com.wheremy.app.data.backup.formatBytes
+import com.wheremy.app.data.repo.CATEGORIES
+import com.wheremy.app.data.repo.EXPIRE_KINDS
+import com.wheremy.app.data.repo.LOCATION_KINDS
+import com.wheremy.app.data.repo.SEASONS
 import com.wheremy.app.data.settings.SettingsRepository
+import com.wheremy.app.data.settings.WordListKind
+import com.wheremy.app.data.settings.WordLists
 import com.wheremy.app.reminder.ReminderNotifier
 import com.wheremy.app.reminder.ReminderRunner
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -52,6 +58,13 @@ data class SettingsUiState(
     val busy: Boolean = false,
     /** 备份那一次的结果那句话（五种收场之一） */
     val backupResult: String? = null,
+    /**
+     * 四套词表的**编辑草稿**（`FR-CFG-06`）：按了各自那颗「保存」才落盘。
+     * 空串 = 还没动过，界面会填上当前生效的那份。
+     */
+    val wordDrafts: Map<WordListKind, String> = emptyMap(),
+    /** 当前生效的四套词表（存过的或预设）。 */
+    val wordLists: WordLists? = null,
 ) {
     /** 设置页那一行（🗣）：0 天不许说"提前 0 天"。 */
     val leadDaysLine: String
@@ -93,6 +106,7 @@ class SettingsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             settings.changes.collect { saved ->
+                val effective = saved.wordLists(CATEGORIES, SEASONS, EXPIRE_KINDS, LOCATION_KINDS)
                 _state.update { current ->
                     current.copy(
                         loading = false,
@@ -105,9 +119,45 @@ class SettingsViewModel @Inject constructor(
                         apiKey = current.apiKey.ifBlank { saved.apiKey },
                         aiCalls = saved.aiCallCount,
                         aiTokens = saved.aiTokens,
+                        wordLists = effective,
+                        // 草稿同样只在没动过的时候填
+                        wordDrafts = WordListKind.entries.associateWith { kind ->
+                            current.wordDrafts[kind].orEmpty().ifBlank { effective.of(kind).joinToString("、") }
+                        },
                     )
                 }
             }
+        }
+    }
+
+    // —— 词表（FR-CFG-06）——
+
+    fun setWordDraft(kind: WordListKind, text: String) {
+        _state.update { it.copy(wordDrafts = it.wordDrafts + (kind to text)) }
+    }
+
+    /**
+     * 保存一套词表。分隔符放宽：顿号、逗号、空格、换行都算——用户不会关心我们用哪个当分隔符。
+     *
+     * 清空 = 回到预设（`SettingsRepository.setWordList` 里就是这个语义），所以"恢复默认"和
+     * "把框里删干净再保存"是同一件事，不用教两遍。
+     */
+    fun saveWordList(kind: WordListKind) {
+        val text = state.value.wordDrafts[kind].orEmpty()
+        val values = text.split('、', ',', '，', ' ', '\n', '\r', '\t')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        viewModelScope.launch {
+            settings.setWordList(kind, values)
+            _state.update { it.copy(notice = "「${kind.label}」已保存（${values.size} 项）。") }
+        }
+    }
+
+    fun resetWordLists() {
+        viewModelScope.launch {
+            settings.resetWordLists()
+            // 草稿也清掉，界面会重新填上预设
+            _state.update { it.copy(wordDrafts = emptyMap(), notice = "四套词表都回到默认了。") }
         }
     }
 

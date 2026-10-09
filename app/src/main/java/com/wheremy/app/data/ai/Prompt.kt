@@ -1,8 +1,5 @@
 package com.wheremy.app.data.ai
 
-import com.wheremy.app.data.repo.CATEGORIES
-import com.wheremy.app.data.repo.SEASONS
-
 /**
  * 提示词（`RULES.md` §5.6）。
  *
@@ -10,6 +7,9 @@ import com.wheremy.app.data.repo.SEASONS
  * 否则读留痕时核对的是"我们以为发了的"，不是"真发了的"。
  *
  * 🗣 引号里的句子是文档给的**逐字**要求，不许改词；其余是从这些要求拼起来的叙述。
+ *
+ * 🔗 `FR-CFG-06`：类别与季节词表**由调用方传进来**（用户改过就用用户那份）——
+ * 提示词里必须写用户自己那份，否则模型会回一堆词表外的值，芯片行上显示不出选中态。
  */
 object Prompt {
 
@@ -32,27 +32,25 @@ object Prompt {
     private const val CONTAINER_GENERIC =
         "如果看得出来它平时收在哪里，填一条位置路径；看不出来就填 null。"
 
-    private val FIELDS = listOf(
-        "name：必填，口语叫法（比如「数据线」而不是「USB Type-C 线缆」）",
-        "category：从这 ${CATEGORIES.size} 个里选一个：${CATEGORIES.joinToString(" ")}",
-        "seasons：只填 ${SEASONS.joinToString("/")} 里确实相关的，可以多个",
-        "color / material：看得出来的话",
-        "brand：仅当照片上文字清晰可读时才填，否则填 null。绝对不要猜测品牌。",
-        "aliases：0–3 个其它叫法",
-        "description：≤60 字",
-        "tags：3–8 个短标签",
-    )
-
     /**
+     * @param categories 生效的物品类别词表。
+     * @param seasons 生效的季节词表。
      * @param locationPaths 喂给模型的候选：`LocationTree.selectablePaths()`（先序、**根不列**）。
      *   空清单时「可选位置」整段不出现、`container_guess` 退回通用问法（`RULES.md` §5.6）。
      */
-    fun build(locationPaths: List<String>): String = buildString {
+    fun build(categories: List<String>, seasons: List<String>, locationPaths: List<String>): String = buildString {
         appendLine(ROLE)
         appendLine(SUPPORT_SURFACE)
         appendLine(OUTPUT_RULE)
         appendLine("回一个 JSON 对象，形如 {\"items\": [ {...}, {...} ]}。每个物品的字段：")
-        FIELDS.forEach { appendLine("- $it") }
+        appendLine("- name：必填，口语叫法（比如「数据线」而不是「USB Type-C 线缆」）")
+        appendLine("- category：从这 ${categories.size} 个里选一个：${categories.joinToString(" ")}")
+        appendLine("- seasons：只填 ${seasons.joinToString("/")} 里确实相关的，可以多个")
+        appendLine("- color / material：看得出来的话")
+        appendLine("- brand：仅当照片上文字清晰可读时才填，否则填 null。绝对不要猜测品牌。")
+        appendLine("- aliases：0–3 个其它叫法")
+        appendLine("- description：≤60 字")
+        appendLine("- tags：3–8 个短标签")
         if (locationPaths.isEmpty()) {
             appendLine("- container_guess：$CONTAINER_GENERIC")
         } else {

@@ -1,5 +1,7 @@
 package com.wheremy.app.data.ai
 
+import com.wheremy.app.data.repo.CATEGORIES
+import com.wheremy.app.data.repo.SEASONS
 import com.wheremy.app.domain.LocationPath
 import com.wheremy.app.domain.SuggestLocationUseCase
 import com.wheremy.app.ui.UiFormat
@@ -193,22 +195,41 @@ class AiLogicTest {
 
     @Test
     fun `提示词带位置清单时用替换问法`() {
-        val withList = Prompt.build(listOf("家 / 衣柜", "家 / 抽屉"))
+        val withList = Prompt.build(CATEGORIES, SEASONS, listOf("家 / 衣柜", "家 / 抽屉"))
         assertTrue("整句替换：不许只填末级那个词", withList.contains("不要只填末级那个词"))
         assertTrue("承托面不算一件（真机跑出来的那句）", withList.contains("不要把桌面、地板、床面、抽屉内壁这类承托面也算成一件"))
         assertTrue("品牌不许猜", withList.contains("绝对不要猜测品牌"))
         assertTrue(withList.contains("家 / 衣柜"))
 
-        val withoutList = Prompt.build(emptyList())
+        val withoutList = Prompt.build(CATEGORIES, SEASONS, emptyList())
         assertFalse("空清单时那一整段不出现", withoutList.contains("可选位置"))
         assertTrue("字段行退回通用问法", withoutList.contains("container_guess"))
     }
 
     @Test
     fun `提示词里写上十二个分类与四个季节`() {
-        val prompt = Prompt.build(emptyList())
+        val prompt = Prompt.build(CATEGORIES, SEASONS, emptyList())
         assertTrue(prompt.contains("衣物"))
         assertTrue(prompt.contains("春"))
+    }
+
+    /**
+     * FR-CFG-06 的关键一条：**用户改过词表，提示词必须跟着改**。
+     *
+     * 不跟的后果很具体：模型会回一堆词表外的值，芯片行上显示不出选中态（`RULES.md` §5.7 那个偏差
+     * 就是这么来的）。所以这里钉的是"提示词里出现的是用户那份，不是代码里那份"。
+     */
+    @Test
+    fun `用户改过词表时提示词用用户那份`() {
+        val prompt = Prompt.build(
+            categories = listOf("手办", "模型"),
+            seasons = listOf("旱季", "雨季"),
+            locationPaths = emptyList(),
+        )
+        assertTrue("要用用户的类别", prompt.contains("手办") && prompt.contains("模型"))
+        assertTrue("要用用户的季节", prompt.contains("旱季") && prompt.contains("雨季"))
+        assertFalse("不许再提代码里的预设类别", prompt.contains("衣物"))
+        assertTrue("项数也要跟着变", prompt.contains("从这 2 个里选一个"))
     }
 
     @Test

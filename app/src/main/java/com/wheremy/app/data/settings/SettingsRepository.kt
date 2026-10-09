@@ -17,6 +17,32 @@ import kotlinx.coroutines.flow.map
 /** DataStore 文件名（`ARCHITECTURE.md` §6.4）。 */
 val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "wheremy_settings")
 
+/**
+ * 四套词表（`FR-CFG-06`）。**空 = 用代码里的预设**，所以"从没改过"和"改回默认"是同一件事。
+ *
+ * 🔒 改词表**不动已有数据**：`category` / `seasons` 从来不做白名单校验（`RULES.md` §5.7），
+ * 用户把某一项删掉之后，已经用了这个值的物品仍然在详情页原样显示——只是芯片行上没它了。
+ */
+data class WordLists(
+    val categories: List<String>,
+    val seasons: List<String>,
+    val expireKinds: List<String>,
+    val locationKinds: List<String>,
+) {
+    /** 按名字取那一套——界面遍历枚举时要用，免得写四个 `when` 分支。 */
+    fun of(kind: WordListKind): List<String> = when (kind) {
+        WordListKind.CATEGORIES -> categories
+        WordListKind.SEASONS -> seasons
+        WordListKind.EXPIRE_KINDS -> expireKinds
+        WordListKind.LOCATION_KINDS -> locationKinds
+    }
+
+    companion object {
+        /** 📐 每个词表最多这些项：再多芯片行就没法用了，也不符合"个人自己的分类法"这个场景。 */
+        const val MAX_ITEMS = 24
+    }
+}
+
 data class Settings(
     val visionEnabled: Boolean,
     val baseUrl: String,
@@ -28,10 +54,28 @@ data class Settings(
     val aiCallCount: Int = 0,
     /** 服务端报的 tokens 合计；接口不报就不涨。 */
     val aiTokens: Long = 0L,
+    /** 四套词表（`FR-CFG-06`）；每一项为空列表时由调用方回落到代码里的预设。 */
+    val categories: List<String> = emptyList(),
+    val seasons: List<String> = emptyList(),
+    val expireKinds: List<String> = emptyList(),
+    val locationKinds: List<String> = emptyList(),
 ) {
     /** 四样齐了才算能用：开关、key、地址、模型。 */
     val hasUsableKey: Boolean
         get() = visionEnabled && apiKey.isNotBlank() && baseUrl.isNotBlank() && model.isNotBlank()
+
+    /** 真正生效的四套词表：存过的用存的，没存过的用预设。 */
+    fun wordLists(
+        presetCategories: List<String>,
+        presetSeasons: List<String>,
+        presetExpireKinds: List<String>,
+        presetLocationKinds: List<String>,
+    ): WordLists = WordLists(
+        categories = categories.ifEmpty { presetCategories },
+        seasons = seasons.ifEmpty { presetSeasons },
+        expireKinds = expireKinds.ifEmpty { presetExpireKinds },
+        locationKinds = locationKinds.ifEmpty { presetLocationKinds },
+    )
 }
 
 /** AI 分析要的那三样（不可用时给 null）。 */
@@ -54,10 +98,26 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             searchTextVersion = prefs[KEY_SEARCH_TEXT_VERSION] ?: SearchTextBuilder.FIELD_VERSION,
             aiCallCount = prefs[KEY_AI_CALLS] ?: 0,
             aiTokens = prefs[KEY_AI_TOKENS] ?: 0L,
+            categories = splitList(prefs[KEY_CATEGORIES]),
+            seasons = splitList(prefs[KEY_SEASONS]),
+            expireKinds = splitList(prefs[KEY_EXPIRE_KINDS]),
+            locationKinds = splitList(prefs[KEY_LOCATION_KINDS]),
         )
     }
 
     suspend fun current(): Settings = changes.first()
+
+    /**
+     * 四套词表的**实际生效值**：存过的用存的，没存过的用代码里的预设（`FR-CFG-06`）。
+     *
+     * 预设由调用方传进来，是为了不让数据层反过来依赖 `ui` 层要用的那份常量表。
+     */
+    suspend fun wordLists(
+        presetCategories: List<String>,
+        presetSeasons: List<String>,
+        presetExpireKinds: List<String>,
+        presetLocationKinds: List<String>,
+    ): WordLists = current().wordLists(presetCategories, presetSeasons, presetExpireKinds, presetLocationKinds)
 
     suspend fun currentConfig(): VisionConfig? {
         val settings = current()
@@ -94,6 +154,36 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         if (tokens > 0) it[KEY_AI_TOKENS] = (it[KEY_AI_TOKENS] ?: 0L) + tokens
     }.let { }
 
+    /**
+     * 改一套词表（`FR-CFG-06`）。写入侧就清洗：去空白、丢空项、去重、封顶 [WordLists.MAX_ITEMS]。
+     *
+     * 存成**多行字符串**而不是逗号分隔：用户自己的叫法里很可能就有逗号（"螺丝、钉子"这种写法反而常见），
+     * 用一个不会出现在词里的分隔符（换行）最省事。
+     */
+    suspend fun setWordList(kind: WordListKind, values: List<String>) = store.edit { prefs ->
+        val clean = normalize(values)
+        if (clean.isEmpty()) {
+            // 清空 = 回到预设（而不是"一项都没有"）
+            prefs.remove(kind.key)
+        } else {
+            prefs[kind.key] = clean.joinToString("\n")
+        }
+    }.let { }
+
+    /** 「恢复默认」：四套词表一起清掉，等于回到代码里的预设。 */
+    suspend fun resetWordLists() = store.edit { prefs ->
+        WordListKind.entries.forEach { prefs.remove(it.key) }
+    }.let { }
+
+    private fun normalize(values: List<String>): List<String> = values
+        .map { it.replace('\n', ' ').replace('\r', ' ').trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
+        .take(WordLists.MAX_ITEMS)
+
+    private fun splitList(raw: String?): List<String> =
+        raw?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+
     companion object {
         const val DEFAULT_BASE_URL = "https://api.deepseek.com"
         const val DEFAULT_MODEL = "deepseek-flash"
@@ -110,5 +200,17 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val KEY_SEARCH_TEXT_VERSION = intPreferencesKey("search_text_version")
         val KEY_AI_CALLS = intPreferencesKey("ai_call_count")
         val KEY_AI_TOKENS = longPreferencesKey("ai_token_total")
+        val KEY_CATEGORIES = stringPreferencesKey("word_categories")
+        val KEY_SEASONS = stringPreferencesKey("word_seasons")
+        val KEY_EXPIRE_KINDS = stringPreferencesKey("word_expire_kinds")
+        val KEY_LOCATION_KINDS = stringPreferencesKey("word_location_kinds")
     }
+}
+
+/** 四套词表的名字（`FR-CFG-06`）——界面与仓储用同一个枚举，别在两处各写一遍字符串。 */
+enum class WordListKind(val label: String, val key: androidx.datastore.preferences.core.Preferences.Key<String>) {
+    CATEGORIES("物品类别", SettingsRepository.KEY_CATEGORIES),
+    SEASONS("季节", SettingsRepository.KEY_SEASONS),
+    EXPIRE_KINDS("到期类型", SettingsRepository.KEY_EXPIRE_KINDS),
+    LOCATION_KINDS("位置类型", SettingsRepository.KEY_LOCATION_KINDS),
 }

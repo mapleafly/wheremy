@@ -8,6 +8,7 @@ import com.wheremy.app.data.photos.PhotoStore
 import com.wheremy.app.data.repo.ItemDraft
 import com.wheremy.app.data.repo.ItemRepository
 import com.wheremy.app.data.repo.LocationRepository
+import com.wheremy.app.data.settings.testSettings
 import com.wheremy.app.data.testJpeg
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -64,7 +65,7 @@ class TreeViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun tree(): TreeViewModel = TreeViewModel(locations, items)
+    private fun tree(): TreeViewModel = TreeViewModel(locations, items, testSettings())
 
     private fun awaitState(vm: TreeViewModel, description: String, predicate: (TreeUiState) -> Boolean): TreeUiState {
         val deadline = System.currentTimeMillis() + 5_000

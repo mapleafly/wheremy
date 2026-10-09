@@ -45,6 +45,7 @@ import com.wheremy.app.data.db.WheremyDatabase
 import com.wheremy.app.data.photos.PhotoStore
 import com.wheremy.app.data.repo.ItemRepository
 import com.wheremy.app.data.repo.LocationRepository
+import com.wheremy.app.data.settings.SettingsRepository
 import com.wheremy.app.domain.CaptureFlow
 import com.wheremy.app.ui.review.ReviewUiState
 import com.wheremy.app.ui.review.ReviewViewModel
@@ -265,6 +266,7 @@ private suspend fun runP2SelfCheck(context: Context): List<String> {
     val locations = LocationRepository(db, store)
     val flow = CaptureFlow(items)
     // 自检**不连网**：配置给 null，于是 AI 那条路直接走 NOTHING_FOUND/NO_CONFIG 分支
+    val selfCheckSettings = SettingsRepository(MemoryPreferencesStore())
     val analyzer = ApiPhotoAnalyzer({ null }, AnalysisTrace(File(context.cacheDir, "selfcheck-ai-trace")))
 
     try {
@@ -280,7 +282,7 @@ private suspend fun runP2SelfCheck(context: Context): List<String> {
         out += if (items.inbox().any { it.id == itemId }) "✅ 未保存的件出现在待归类" else "❌ 待归类里没有它"
 
         // ② 确认页状态机：改名 → 保存
-        val vm = ReviewViewModel(items, locations, flow, analyzer)
+        val vm = ReviewViewModel(items, locations, flow, analyzer, selfCheckSettings)
         vm.start(itemId)
         awaitState(vm) { it.current != null }
         val canSaveBefore = vm.state.value.canSave
@@ -304,7 +306,7 @@ private suspend fun runP2SelfCheck(context: Context): List<String> {
         // 选了位置再确认，这才该离开待归类
         val home = locations.add(parentId = null, name = "自检家", kind = "房间")
         val placedId = flow.capture(jpegWithOrientation(700, 350, ExifInterface.ORIENTATION_NORMAL)) {}.itemId
-        val vmPlaced = ReviewViewModel(items, locations, flow, analyzer)
+        val vmPlaced = ReviewViewModel(items, locations, flow, analyzer, selfCheckSettings)
         vmPlaced.start(placedId)
         awaitState(vmPlaced) { it.current != null }
         vmPlaced.setName("自检电钻二号")
@@ -320,7 +322,7 @@ private suspend fun runP2SelfCheck(context: Context): List<String> {
 
         // ③ 稍后处理：写字段但留在待归类
         val laterId = flow.capture(jpegWithOrientation(600, 300, ExifInterface.ORIENTATION_NORMAL)) {}.itemId
-        val vm2 = ReviewViewModel(items, locations, flow, analyzer)
+        val vm2 = ReviewViewModel(items, locations, flow, analyzer, selfCheckSettings)
         vm2.start(laterId)
         awaitState(vm2) { it.current != null }
         vm2.setName("自检护照")
@@ -337,7 +339,7 @@ private suspend fun runP2SelfCheck(context: Context): List<String> {
         // ④ 空壳回收：什么都没动就退出 → 行与文件都不留
         val shellId = flow.capture(jpegWithOrientation(500, 500, ExifInterface.ORIENTATION_NORMAL)) {}.itemId
         val shellPath = items.photosOf(shellId).single().filePath
-        val vm3 = ReviewViewModel(items, locations, flow, analyzer)
+        val vm3 = ReviewViewModel(items, locations, flow, analyzer, selfCheckSettings)
         vm3.start(shellId)
         awaitState(vm3) { it.current != null }
         vm3.requestExit()
@@ -383,4 +385,22 @@ private fun jpegWithOrientation(width: Int, height: Int, orientation: Int): Byte
     val bytes = carrier.readBytes()
     carrier.delete()
     return bytes
+}
+
+/** 自检用的内存版 DataStore：**不碰**真偏好文件（跟测试里那个同一个理由，见 F23）。 */
+private class MemoryPreferencesStore :
+    androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> {
+    private val state = kotlinx.coroutines.flow.MutableStateFlow(
+        androidx.datastore.preferences.core.emptyPreferences(),
+    )
+    override val data: kotlinx.coroutines.flow.Flow<androidx.datastore.preferences.core.Preferences> = state
+    override suspend fun updateData(
+        transform: suspend (
+            androidx.datastore.preferences.core.Preferences,
+        ) -> androidx.datastore.preferences.core.Preferences,
+    ): androidx.datastore.preferences.core.Preferences {
+        val next = transform(state.value)
+        state.value = next
+        return next
+    }
 }
