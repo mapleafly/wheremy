@@ -37,6 +37,7 @@ import com.wheremy.app.ui.detail.DetailScreen
 import com.wheremy.app.ui.gallery.GalleryScreen
 import com.wheremy.app.ui.review.ReviewScreen
 import com.wheremy.app.ui.theme.WheremySpacing
+import com.wheremy.app.ui.tree.TreeScreen
 import kotlinx.serialization.Serializable
 
 /** 目的地键（Nav3 要求 @Serializable）。 */
@@ -54,6 +55,10 @@ data class DetailKey(val itemId: String) : NavKey
 
 @Serializable
 data object SettingsKey : NavKey
+
+/** 位置页（`UI.md` §4）：树在内存里建，面包屑就是标题。 */
+@Serializable
+data object TreeKey : NavKey
 
 /** 开发期：生成/清空演示数据（合成照片，不碰相册）。 */
 @Serializable
@@ -112,6 +117,7 @@ fun WheremyRoot(devRoute: String? = null, captureVm: CaptureViewModel = hiltView
                     onOpenItem = { itemId -> backStack.add(DetailKey(itemId)) },
                     onPickPhoto = launchPicker,
                     onOpenInbox = { switchTo(InboxKey) },
+                    onOpenTree = { switchTo(TreeKey) },
                     onOpenSettings = { switchTo(SettingsKey) },
                 )
             }
@@ -121,6 +127,14 @@ fun WheremyRoot(devRoute: String? = null, captureVm: CaptureViewModel = hiltView
                     onOpenItem = { itemId -> backStack.add(DetailKey(itemId)) },
                     onPickPhoto = launchPicker,
                     onOpenGallery = { switchTo(GalleryKey) },
+                    onOpenTree = { switchTo(TreeKey) },
+                    onOpenSettings = { switchTo(SettingsKey) },
+                )
+            }
+            entry<TreeKey> {
+                TreeScreen(
+                    onOpenGallery = { switchTo(GalleryKey) },
+                    onOpenInbox = { switchTo(InboxKey) },
                     onOpenSettings = { switchTo(SettingsKey) },
                 )
             }

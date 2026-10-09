@@ -73,6 +73,7 @@ fun GalleryScreen(
     onPickPhoto: () -> Unit,
     onOpenGallery: () -> Unit = {},
     onOpenInbox: () -> Unit = {},
+    onOpenTree: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     vm: GalleryViewModel = hiltViewModel(),
 ) {
@@ -109,6 +110,7 @@ fun GalleryScreen(
             ) {
                 TextButton(onClick = onOpenGallery) { Text("照片墙") }
                 TextButton(onClick = onOpenInbox) { Text("待归类") }
+                TextButton(onClick = onOpenTree) { Text("位置") }
                 TextButton(onClick = onOpenSettings) { Text("设置") }
             }
         },

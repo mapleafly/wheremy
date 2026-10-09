@@ -26,7 +26,8 @@ class LocationNotEmptyException(val childCount: Int, val itemCount: Int) : Illeg
  */
 class LocationRepository(
     private val db: WheremyDatabase,
-    private val photoStore: PhotoStore,
+    /** 界面层要拿它把相对路径换成绝对路径（与 `ItemRepository` 同一做法） */
+    val photoStore: PhotoStore,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
 
