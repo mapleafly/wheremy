@@ -3,6 +3,11 @@ package com.wheremy.app.ui.settings
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wheremy.app.data.backup.BackupFormatException
+import com.wheremy.app.data.backup.BackupRepository
+import com.wheremy.app.data.backup.BackupSummary
+import com.wheremy.app.data.backup.ImportMode
+import com.wheremy.app.data.backup.formatBytes
 import com.wheremy.app.data.settings.SettingsRepository
 import com.wheremy.app.reminder.ReminderNotifier
 import com.wheremy.app.reminder.ReminderRunner
@@ -40,6 +45,10 @@ data class SettingsUiState(
     val debugResult: String? = null,
     val notifyProblem: String? = null,
     val notice: String? = null,
+    /** 备份：忙的时候**忽略新手势**（`RULES.md` §16） */
+    val busy: Boolean = false,
+    /** 备份那一次的结果那句话（五种收场之一） */
+    val backupResult: String? = null,
 ) {
     /** 设置页那一行（🗣）：0 天不许说"提前 0 天"。 */
     val leadDaysLine: String
@@ -54,11 +63,12 @@ data class SettingsUiState(
         }
 }
 
-/** 设置页（`UI.md` §7）。三节：到期提醒 / AI 分析照片 / 备份（备份在 P5 后半）。 */
+/** 设置页（`UI.md` §7）。三节：到期提醒 / AI 分析照片 / 备份。 */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settings: SettingsRepository,
     private val runner: ReminderRunner,
+    private val backup: BackupRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsUiState())
@@ -139,4 +149,61 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun consumeNotice() = _state.update { it.copy(notice = null) }
+
+    // —— 备份（`UI.md` §7.3；`RULES.md` §12、§16）——
+
+    /**
+     * 三颗按钮共用的收场，**五种**：忙 → 这次手势直接忽略；`BackupFormatException` → 贴异常自己的中文；
+     * 其他异常 → 贴该操作的 `fallback`（英文 IOException 直接上屏没有意义）；
+     * `null` → 连文件都没打开；成功 → 报条数，且**只有 `bytes > 0` 才**追加字节数。
+     */
+    private suspend fun operate(label: String, fallback: String, action: suspend () -> BackupSummary?) {
+        if (_state.value.busy) return
+        _state.update { it.copy(busy = true, backupResult = null) }
+        val sentence = try {
+            val summary = action()
+            if (summary == null) {
+                "${label}失败：打不开那个文件，换个位置再试"
+            } else {
+                buildString {
+                    append("${label}完成 · 位置 ${summary.locations} 个 · 物品 ${summary.items} 件 · 照片 ${summary.photos} 张")
+                    if (summary.bytes > 0) append(" · ${formatBytes(summary.bytes)}")
+                }
+            }
+        } catch (e: BackupFormatException) {
+            "${label}失败：${e.message}"
+        } catch (e: Throwable) {
+            "${label}失败：$fallback"
+        }
+        _state.update { it.copy(busy = false, backupResult = sentence) }
+    }
+
+    /** @param open 由界面层打开 SAF 流；返回 null 表示"连文件都没打开"（既不是异常也不算成功）。 */
+    fun exportBackup(open: () -> java.io.OutputStream?) {
+        viewModelScope.launch {
+            operate(label = "导出", fallback = FALLBACK_EXPORT) {
+                open()?.use { stream -> backup.exportTo(stream) }
+            }
+        }
+    }
+
+    fun importBackup(mode: ImportMode, open: () -> java.io.InputStream?) {
+        val label = if (mode == ImportMode.MERGE) "合并导入" else "覆盖导入"
+        viewModelScope.launch {
+            operate(label = label, fallback = FALLBACK_IMPORT) {
+                open()?.use { stream -> backup.importFrom(stream, mode) }
+            }
+        }
+    }
+
+    fun consumeBackupResult() = _state.update { it.copy(backupResult = null) }
+
+    companion object {
+        /**
+         * 非 `BackupFormatException` 的兜底：给的是**下一步该做什么**。
+         * 📌 这两句是本实现自己写的：文档只钉住了这个位置要给"该操作的下一步提示"，没有给逐字串。
+         */
+        const val FALLBACK_EXPORT = "换个有写入权限的位置再试一次（比如「下载」目录）"
+        const val FALLBACK_IMPORT = "确认选的是 Wheremy 导出的 zip，然后再选一次"
+    }
 }

@@ -1,6 +1,8 @@
 package com.wheremy.app.di
 
 import android.content.Context
+import com.wheremy.app.BuildConfig
+import com.wheremy.app.data.backup.BackupRepository
 import com.wheremy.app.data.db.WheremyDatabase
 import com.wheremy.app.data.photos.PhotoStore
 import com.wheremy.app.data.repo.ItemRepository
@@ -54,4 +56,22 @@ object DataModule {
     @Provides
     @Singleton
     fun reminderEngine(db: WheremyDatabase): ReminderEngine = ReminderEngine(db.itemDao())
+
+    /**
+     * 备份（`RULES.md` §12）。构造参数里**刻意没有** `SettingsRepository`：
+     * 导出通道物理上碰不到 key 与任何设置。
+     */
+    @Provides
+    @Singleton
+    fun backupRepository(
+        db: WheremyDatabase,
+        photoStore: PhotoStore,
+        @ApplicationContext context: Context,
+    ): BackupRepository = BackupRepository(
+        db = db,
+        photoStore = photoStore,
+        appVersion = BuildConfig.VERSION_NAME,
+        // 解包暂存目录：刻意在 photos/ 下面（它的两个正式目录之外），覆盖导入的清理不会误删它
+        stagingDir = File(photoStore.rootDir, ".incoming"),
+    )
 }

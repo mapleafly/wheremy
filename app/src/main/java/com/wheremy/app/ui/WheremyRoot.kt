@@ -106,6 +106,17 @@ fun WheremyRoot(
         backStack.add(key)
     }
 
+    /**
+     * 底栏页签之间的切换：**照片墙永远留在栈底**。
+     *
+     * ⚠️ 用 `clear()+add()` 会把照片墙也清掉，于是"在设置页按返回"直接退出应用（真机上踩到过）。
+     * 正确形状是：把当前页签换掉，照片墙还在下面——返回键于是自然回到照片墙。
+     */
+    fun switchTab(key: NavKey) {
+        while (backStack.size > 1) backStack.removeLastOrNull()
+        if (key != GalleryKey && backStack.lastOrNull() != key) backStack.add(key)
+    }
+
     NavDisplay(
         backStack = backStack,
         onBack = { backStack.removeLastOrNull() },
@@ -116,9 +127,9 @@ fun WheremyRoot(
                     showExpiringSoonOnly = entry == ReminderNotifier.ENTRY_EXPIRING,
                     onOpenItem = { itemId -> backStack.add(DetailKey(itemId)) },
                     onPickPhoto = launchPicker,
-                    onOpenInbox = { switchTo(InboxKey) },
-                    onOpenTree = { switchTo(TreeKey) },
-                    onOpenSettings = { switchTo(SettingsKey) },
+                    onOpenInbox = { switchTab(InboxKey) },
+                    onOpenTree = { switchTab(TreeKey) },
+                    onOpenSettings = { switchTab(SettingsKey) },
                 )
             }
             entry<InboxKey> {
@@ -126,16 +137,16 @@ fun WheremyRoot(
                     inboxMode = true,
                     onOpenItem = { itemId -> backStack.add(DetailKey(itemId)) },
                     onPickPhoto = launchPicker,
-                    onOpenGallery = { switchTo(GalleryKey) },
-                    onOpenTree = { switchTo(TreeKey) },
-                    onOpenSettings = { switchTo(SettingsKey) },
+                    onOpenGallery = { switchTab(GalleryKey) },
+                    onOpenTree = { switchTab(TreeKey) },
+                    onOpenSettings = { switchTab(SettingsKey) },
                 )
             }
             entry<TreeKey> {
                 TreeScreen(
-                    onOpenGallery = { switchTo(GalleryKey) },
-                    onOpenInbox = { switchTo(InboxKey) },
-                    onOpenSettings = { switchTo(SettingsKey) },
+                    onOpenGallery = { switchTab(GalleryKey) },
+                    onOpenInbox = { switchTab(InboxKey) },
+                    onOpenSettings = { switchTab(SettingsKey) },
                 )
             }
             entry<DetailKey> {

@@ -40,6 +40,8 @@ android {
 
     buildFeatures {
         compose = true
+        // 备份清单里要写 VERSION_NAME（`RULES.md` §15 的"versionName 进备份清单"）
+        buildConfig = true
     }
 
     compileOptions {

@@ -81,6 +81,10 @@ fun GalleryScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     var expanded by remember { mutableStateOf(false) }
 
+    // 每次进入本页都重读：别的屏（详情/位置页）可能刚搬走、删掉或覆盖导入过
+    // ⚠️ 真机上踩到过：覆盖导入之后回到照片墙，墙上还是导入前那几件（库已经变了，视图没跟上）
+    LaunchedEffect(Unit) { vm.refresh() }
+
     // 待归类页：标题 + **收件箱谓词**一起切（只改标题会把全库列出来——第一版就是这么错的）
     LaunchedEffect(inboxMode) { vm.setInboxMode(inboxMode) }
 

@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-10-09 · P5 收口：备份导出 / 导入（含四条拒与 MERGE/OVERWRITE）
+
+**交付**：
+
+| 文件 | 内容 |
+|---|---|
+| `data/backup/BackupModels.kt` | `manifest.json`（`formatVersion` / `schemaVersion` / `appVersion` / `exportedAt`）+ `data.json`（四表行，entity 直接 `@Serializable`，不额外定义 DTO）+ `ImportMode` / `BackupSummary` / `BackupFormatException`（**message 就是要给用户看的中文**）+ `isPhotoEntry` 路径白名单（**恰好一层**、字符集受限、不许 `..`）+ `formatBytes`（1000 进制、整除截断） |
+| `data/backup/BackupRepository.kt` | **导出**：四表在**同一个事务里读**（否则会导出"所属物品不在包里"的照片行）；同一路径只写一次；读不到的图跳过；计数按**文件对**。**导入**：读包（缺件/解不开/schema 更高/非法文件名各有各的说法）→ 四条拒 → **一个事务落库**（MERGE 按主键跳过、OVERWRITE 先清空；位置 `parentsFirst` 排父在前）→ **事务成功之后**才 `removeLocalPhotosNotIn` + 搬图；`.incoming` 暂存目录进门先删、`finally` 再删。🔒 构造参数里**刻意没有** `SettingsRepository` |
+| 设置页第三节 | 三颗按钮（导出到文件 / 合并导入 / 覆盖导入，忙时 `enabled=false`）+ 进度行「正在读写备份包…」+ 四句说明（含加粗的「备份文件里不含 API key，也不含任何设置。」与 `allowBackup=false` 那句）+ 覆盖确认框（标题与正文**逐字**）+ `pendingMode` 在回调第一行清空（一次选择只兑现一次导入）；导入 MIME 用通配、导出 `CreateDocument("application/zip")`、建议名 `wheremy-backup-${LocalDate.now()}.zip` |
+| `SettingsViewModel` | `operate` **五种收场**：忙→忽略；`BackupFormatException`→贴中文；其他异常→贴该操作的 `fallback`；`null`→「打不开那个文件，换个位置再试」；成功→`${label}完成 · 位置 N 个 · 物品 N 件 · 照片 N 张`（仅 `bytes > 0` 才加字节数） |
+| 构建 | `buildFeatures.buildConfig = true`（备份清单要写 `VERSION_NAME`） |
+
+**判绿双证**：**24 类 / 161 例**（新增 `BackupRepositoryTest` 17 条）、`freshXml=24/24`、`failures=0 errors=0`、Spotless 通过。
+
+**真机闭环**（截图 `artifacts/screenshots/P5/`）：
+1. 「导出到文件」→ SAF 保存 → 结果句 `导出完成 · 位置 3 个 · 物品 5 件 · 照片 5 张 · 44 kB`，zip 落在「下载」（44,361 字节）。
+2. 在照片墙上**删掉一件**（深灰羽绒外套）→ 墙上剩 4 件。
+3. 「覆盖导入」→ 确认框逐字 → 选回**我们自己那个包**（同一目录里那两个参照应用的旧包属于用户真实数据，全程只读不碰）→ 结果句 `覆盖导入完成 · 位置 3 个 · 物品 5 件 · 照片 5 张`。
+4. 拉库点数：四表 3/5/5/5，第一件就是被删掉的那件；回到照片墙第一格显示 `深灰羽绒外套` —— **删掉的物品经备份回来了**。
+
+**三条新发现（`PLAN.md` §3.4 F26–F28）**：
+- **F26**：底栏页签原来用 `clear()+add()`，把照片墙也清掉了 → 「设置页按返回」直接退出应用。改成 `switchTab`：**照片墙永远留在栈底**，返回键自然回到它。
+- **F27**：照片墙回到前台不刷新 → 覆盖导入后墙上还是旧数据。补 `LaunchedEffect(Unit) { vm.refresh() }`，与位置页那条"每次进入本页都刷新"对齐。
+- **F28**：导出的"计数流"只加字节数没转发字节 → 导出的包是空的；往返测试当场抓住。
+
+**阶段状态**：`PLAN.md` §10 → P0 ✅、P1 ✅、P2 🟡（AI 未接）、P3 ✅、P4 ✅、**P5 ✅**。
+
+**下一步**：P6（相机取景屏 + 权限门禁 + 来源弹窗、无障碍、自适应含 F21 横屏问题、Roborazzi 截图回归、发布准备）；P2 的 AI 分析要等你把 key 填进设置页才好在真机上验。
+
+---
+
 ## 2026-10-09 · P5 前半：设置页 + 到期提醒
 
 **交付**：
