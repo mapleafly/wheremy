@@ -37,7 +37,7 @@
 | release 变体 | `isMinifyEnabled = true` + `isShrinkResources = true`，keep 规则在 `app/proguard-rules.pro`；**签名暂用调试签名**（⭐FR-RLS-01 未完成，见 §3.2） | `app/build.gradle.kts` |
 | R8 冒烟变体 | `.r8smoke`（规则同 release、包名多一个后缀）——**不能直装 release**：它的包名与参照实现那个应用同名 | 同上 |
 | `allowBackup` | `"false"` 🔒（在 release APK 的清单里核过） | `AndroidManifest.xml` |
-| 权限 | 自己声明：`POST_NOTIFICATIONS` + `CAMERA`；**没有任何存储权限**（选图走 SAF/Picker）。合并清单里另有 WorkManager 带进来的 `WAKE_LOCK` / `ACCESS_NETWORK_STATE` / `RECEIVE_BOOT_COMPLETED` / `FOREGROUND_SERVICE`。`INTERNET` 已在 P2 落地时补上（F36） | `aapt2 dump badging`（release APK） |
+| 权限 | 自己声明：`POST_NOTIFICATIONS` + `CAMERA` + `INTERNET`（AI 请求，P2 落地时补，F36）；**没有任何存储权限**（选图走 SAF/Picker）。合并清单里另有 WorkManager 带进来的 `WAKE_LOCK` / `ACCESS_NETWORK_STATE` / `RECEIVE_BOOT_COMPLETED` / `FOREGROUND_SERVICE` | `aapt2 dump badging`（release APK） |
 | DB schema 号 | `DB_SCHEMA_VERSION = 1`，`exportSchema = true`；**没有 `fallbackToDestructiveMigration`**（⭐FR-DB-01 已按 §3.1 满足） | `WheremyDatabase.kt` |
 | 构建入口 | **仓库里有 wrapper**（`gradlew.bat` / `gradlew`）；命令行与 CI 都用它 | 仓库根 |
 | CI | GitHub Actions：`spotlessCheck` → `testDebugUnitTest` → `verifyRoborazziDebug` → `assembleRelease`（⚠️ 尚未在真实 GitHub 上跑过） | `.github/workflows/ci.yml` |
@@ -80,7 +80,7 @@
 
 七条，每条三栏都要写出来：**为什么必须**（不说清就会被下一轮当可选项砍掉）、**怎么算做完**（可判定，不是感觉）、**谁签收**（一个角色名，不是"大家"）。
 
-> **本实现的逐条状态（2026-10-09）**：3.1 ✅ 已满足（比参照实现更早还清）｜3.2 ⬜ **未完成**（需要用户自己的 keystore）｜3.3 ✅ 走 B 路线（打开 R8）｜3.4 ✅ 已核（少一条 `INTERNET`，等 P2）｜3.5 ✅ 已核（含 APK 清单）｜3.6 ✅ 单测 17 例 + 真机一次"导出 → 删一件 → 覆盖导入 → 那一件回来"｜3.7 ⬜ 无上一版可演（首版），反面演练由测试覆盖。详细证据见 §10。
+> **本实现的逐条状态（2026-10-09）**：3.1 ✅ 已满足（比参照实现更早还清）｜3.2 ⬜ **未完成**（需要用户自己的 keystore；用户已拍板"后续再做，先按调试签名"）｜3.3 ✅ 走 B 路线（打开 R8）｜3.4 ✅ 已核（`INTERNET` 已于 P2 补上，F36）｜3.5 ✅ 已核（含 APK 清单）｜3.6 ✅ 单测 17 例 + 真机一次"导出 → 删一件 → 覆盖导入 → 那一件回来"｜3.7 ⬜ 无上一版可演（首版），反面演练由测试覆盖。详细证据见 §10。
 
 ### 3.1 ⭐FR-DB-01：用真实 Room Migration 替换 `fallbackToDestructiveMigration(true)`
 
