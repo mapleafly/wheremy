@@ -192,7 +192,7 @@
 | 导航 | 手写外壳 + `rememberSaveable` | **Navigation 3 1.2.0** ✅ 已落地（`NavDisplay` + `entryProvider` + 返回栈） | `ui/WheremyRoot.kt` |
 | DI | 手写 `AppContainer` | **Hilt 2.60.1 + KSP** ✅ 已落地（`@HiltAndroidApp` / `@HiltViewModel` / `@Provides`） | `WheremyApp.kt`、`di/AppModule.kt` |
 | 无障碍 | 🟡 芯片组与装饰件缺 description、焦点次序未梳理 | 全交互元素有语义、触控 ≥48dp、TalkBack 走查、200% 字缩放不破版 | |
-| 自适应布局 | 锁竖屏（⛔FR-PRM-04） | 手机竖/横 + 平板，`NavigationSuiteScaffold` | |
+| 自适应布局 | 锁竖屏（⛔FR-PRM-04） | 手机竖/横 + 平板：窄窗口 `NavigationBar`、宽窗口 `NavigationRail`、矮窗口横排格子 | ✅ 已实现（`WheremyRoot` 的 `BoxWithConstraints` 分级；真机横屏见 `artifacts/screenshots/P6/device-adaptive-landscape.png`）。⚠️ 用 M3 的 `NavigationBar`/`NavigationRail` 手搭，没有引 `NavigationSuiteScaffold`——两者都是官方组件，前者不必多一个依赖 |
 | 配色 | 固定青绿+琥珀；不做动态取色（⛔D4） | chrome 允许动态色，**照片墙保持中性固定色**（需 ADR）；P0 已先把 token 集中到 `ui/theme/Theme.kt` | 见 PLAN §2.3 |
 | 文案资源 | 硬编码 Kotlin | `strings.xml`（T1）+ 文案对齐测试 | |
 | 备份格式 | 自造 zip（四表 JSON） | 保持同一格式（**旧包必须还能导入**），只加不改 | |

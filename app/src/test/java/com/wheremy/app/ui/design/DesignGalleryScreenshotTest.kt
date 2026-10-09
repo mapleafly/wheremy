@@ -27,7 +27,7 @@ class DesignGalleryScreenshotTest {
         compose.setContent {
             WheremyTheme(darkTheme = false) { DesignGalleryScreen(onBack = {}) }
         }
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/design-gallery-light.png")
+        compose.onRoot().captureRoboImage("src/test/screenshots/design-gallery-light.png")
     }
 
     @Test
@@ -35,6 +35,6 @@ class DesignGalleryScreenshotTest {
         compose.setContent {
             WheremyTheme(darkTheme = true) { DesignGalleryScreen(onBack = {}) }
         }
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/design-gallery-dark.png")
+        compose.onRoot().captureRoboImage("src/test/screenshots/design-gallery-dark.png")
     }
 }

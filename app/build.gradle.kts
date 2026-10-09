@@ -30,11 +30,29 @@ android {
             applicationIdSuffix = ".dsh"
         }
         release {
-            isMinifyEnabled = false
+            // P6 发布准备：R8 打开（含资源收缩）。规则见 `proguard-rules.pro`，
+            // 关键三处：Room 3 的实体/DAO、kotlinx.serialization 的生成序列化器、Hilt 的 Worker。
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // ⚠️ 只是给"R8 之后还跑得起来"做真机冒烟用的调试签名。
+            // 真正发布必须换成自己的 keystore（`RELEASE.md` §2），**不要**把这一行当成发布配置。
+            signingConfig = signingConfigs.getByName("debug")
+        }
+        /**
+         * R8 真机冒烟变体：规则与 release 完全一致，只多一个包名后缀。
+         *
+         * 为什么不直接装 release：release 的包名是 `com.wheremy.app`，与**参照实现那个应用同名**——
+         * 装上去要么签名冲突、要么把用户手机上那个应用顶掉。冒烟必须另起一个包名。
+         */
+        create("r8smoke") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".r8smoke"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
         }
     }
 

@@ -34,6 +34,17 @@ jobs:
       - name: 单元测试（JVM + Robolectric）
         run: ./gradlew :app:testDebugUnitTest --console=plain
 
+      # 截图回归：基线在 app/src/test/screenshots/（随代码入库）。
+      # 改了界面而没更新基线时这一步会红——那是要的，逼人看一眼视觉回归。
+      # 更新基线：./gradlew :app:recordRoborazziDebug（本地跑，然后把 PNG 一起提交）
+      - name: 截图回归
+        run: ./gradlew :app:verifyRoborazziDebug --console=plain
+
+      # R8 之后能不能跑：单元测试不跑 R8，所以至少要保证发布构建能产出来。
+      # 真机冒烟（`--es dev backupcheck`）在装了 .r8smoke 变体的机器上人工跑，见 RELEASE.md §3。
+      - name: 发布构建（R8 + 资源收缩）
+        run: ./gradlew :app:assembleRelease --console=plain
+
       - name: 上传测试报告
         if: always()
         uses: actions/upload-artifact@v4
@@ -42,3 +53,4 @@ jobs:
           path: |
             app/build/reports/tests/**
             app/build/test-results/**
+            app/src/test/screenshots/**

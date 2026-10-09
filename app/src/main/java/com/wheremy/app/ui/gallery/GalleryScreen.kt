@@ -14,19 +14,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -69,13 +68,10 @@ import java.io.File
 @Composable
 fun GalleryScreen(
     inboxMode: Boolean = false,
+    /** 矮窗口（手机横屏）：格子换成横排——竖排的 1:1 图 + 三行字在矮窗口里放不下（F21） */
+    compactHeight: Boolean = false,
     showExpiringSoonOnly: Boolean = false,
     onOpenItem: (String) -> Unit,
-    onPickPhoto: () -> Unit,
-    onOpenGallery: () -> Unit = {},
-    onOpenInbox: () -> Unit = {},
-    onOpenTree: () -> Unit = {},
-    onOpenSettings: () -> Unit = {},
     vm: GalleryViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -109,24 +105,6 @@ fun GalleryScreen(
                 },
             )
         },
-        bottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = WheremySpacing.sm, vertical = WheremySpacing.xs),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                TextButton(onClick = onOpenGallery) { Text("照片墙") }
-                TextButton(onClick = onOpenInbox) { Text("待归类") }
-                TextButton(onClick = onOpenTree) { Text("位置") }
-                TextButton(onClick = onOpenSettings) { Text("设置") }
-            }
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = onPickPhoto) {
-                Icon(Icons.Filled.Add, contentDescription = "选照片录入")
-            }
-        },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -150,7 +128,10 @@ fun GalleryScreen(
                 state.inboxMode && state.rows.isEmpty() -> EmptyState("没有待归类的物品，全都放好了。", vm)
                 state.rows.isEmpty() && !state.loading -> EmptyState("还没有物品。点右下角的按钮选第一张照片。", vm)
                 else -> LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = WheremySpacing.gridMin),
+                    // 矮窗口里横排格子要更宽才放得下（缩略图 + 文字列）
+                    columns = GridCells.Adaptive(
+                        minSize = if (compactHeight) 260.dp else WheremySpacing.gridMin,
+                    ),
                     modifier = Modifier
                         .fillMaxSize()
                         .weight(1f),
@@ -158,6 +139,7 @@ fun GalleryScreen(
                         start = WheremySpacing.md,
                         end = WheremySpacing.md,
                         top = WheremySpacing.sm,
+                        // 底部给 FAB 让位（外壳那一颗现在贴的是内容区的右下角）
                         bottom = 88.dp,
                     ),
                     horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm),
@@ -166,6 +148,7 @@ fun GalleryScreen(
                     items(state.rows, key = { it.item.id }) { summary ->
                         GalleryCell(
                             summary = summary,
+                            horizontal = compactHeight,
                             onOpen = { onOpenItem(summary.item.id) },
                             onMenu = { vm.openMenu(summary.item.id) },
                         )
@@ -308,14 +291,17 @@ private fun FilterBar(state: GalleryUiState, expanded: Boolean, onToggleExpanded
     }
 }
 
-/** 单元（`UI.md` §3.5）：图 1:1 → 名字 + ⋮ → 位置行 → 到期行。点图或名字进详情页。 */
+/**
+ * 单元（`UI.md` §3.5）：图 1:1 → 名字 + ⋮ → 位置行 → 到期行。点图或名字进详情页。
+ *
+ * `horizontal = true` 是**矮窗口**（手机横屏）的形态：竖排的 1:1 图 + 三行字在矮窗口里会被裁掉，
+ * 文字行根本看不见（F21）；横排把缩略图放左边、三行字放右边，同样高度里信息齐得多。
+ */
 @Composable
-private fun GalleryCell(summary: ItemSummary, onOpen: () -> Unit, onMenu: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs)) {
+private fun GalleryCell(summary: ItemSummary, horizontal: Boolean = false, onOpen: () -> Unit, onMenu: () -> Unit) {
+    val thumb: @Composable (Modifier) -> Unit = { modifier ->
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
+            modifier = modifier
                 .clip(MaterialTheme.shapes.medium)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .clickable(onClick = onOpen),
@@ -323,7 +309,8 @@ private fun GalleryCell(summary: ItemSummary, onOpen: () -> Unit, onMenu: () -> 
             if (summary.thumbPath != null) {
                 AsyncImage(
                     model = File(summary.thumbPath),
-                    contentDescription = null,
+                    // 无障碍：读屏要能说出这是哪一件；名字为空时不能给一个空描述
+                    contentDescription = summary.item.name.ifBlank { "未命名物品" },
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -336,7 +323,9 @@ private fun GalleryCell(summary: ItemSummary, onOpen: () -> Unit, onMenu: () -> 
                 )
             }
         }
+    }
 
+    val details: @Composable () -> Unit = {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = summary.item.name.ifBlank { "未命名物品" },
@@ -367,6 +356,24 @@ private fun GalleryCell(summary: ItemSummary, onOpen: () -> Unit, onMenu: () -> 
                 style = MaterialTheme.typography.bodySmall,
                 color = if (days <= 30) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+
+    if (horizontal) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm),
+        ) {
+            thumb(Modifier.size(WheremySpacing.thumb * 2))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs),
+            ) { details() }
+        }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs)) {
+            thumb(Modifier.fillMaxWidth().aspectRatio(1f))
+            details()
         }
     }
 }

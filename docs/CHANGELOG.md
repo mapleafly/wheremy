@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-10-09 · P6 后半：自适应 + 无障碍 + 截图回归 + R8 与发布准备
+
+**交付**：
+
+| 项 | 内容 |
+|---|---|
+| **自适应** | 底栏与 FAB 从各屏收到**外壳一层**（`UI.md` §2.2 本来的形状）：`BoxWithConstraints` 判窗口尺寸 → 窄窗口 `NavigationBar`、**宽 ≥600dp 换左侧 `NavigationRail`**；矮窗口（高 <480dp，手机横屏）照片墙格子换**横排**（缩略图左 + 名字/位置/到期三行右）并把网格最小宽度提到 260dp → **F21 治好** |
+| **无障碍** | 照片墙格子图 `contentDescription` 改成物品名（名字为空时给「未命名物品」，不再给空串）、详情页照片给「物品照片」、位置缩略图给「<位置名>的位置照片」；触摸目标沿用 M3 的 `minimumInteractiveComponentSize`（芯片/按钮 ≥48dp） |
+| **截图回归** | Roborazzi **5 张基线入库**（`app/src/test/screenshots/`：取景屏三态里的两态 + 矮窗口一版 + 设计系统浅/深两版）；CI 增加 `verifyRoborazziDebug` |
+| **R8 与发布准备** | release 打开 `isMinifyEnabled` + `isShrinkResources`；`proguard-rules.pro` 写了三条"删了会在真机炸"的 keep（kotlinx.serialization 的 `$$serializer`、Room 3 实体、Hilt 的 Worker）；新增 **`.r8smoke` 变体**（规则同 release、只多包名后缀）用于真机冒烟——因为 release 的包名与参照应用同名，**装上去会顶掉用户手机上那个应用** |
+| **CI** | 静态检查 → 单测 → **截图回归** → **`assembleRelease`**；报告与基线一起上传 |
+
+**判绿双证**：**27 类 / 175 例**、`freshXml=27/27`、`failures=0 errors=0`、Spotless 通过；`verifyRoborazziDebug` 通过。
+
+**真机验证（9aa4b43e）**：
+1. 竖屏：底栏 `NavigationBar` 四项（照片墙/位置/待归类/设置）+ FAB。
+2. **横屏：左侧 `NavigationRail` + 横排格子**，文字行不再被挤出视野（F21 治好）。
+3. 无障碍：照片墙节点的 `content-desc` 是**物品名**（`深灰羽绒外套` / `电钻`）、⋮ 是「操作」、FAB 是「选照片录入」。
+4. **R8 冒烟**：装 `.r8smoke` 包 → `--es dev backupcheck` → 「导出：位置 3 · 物品 5 · 照片 5 · **44331 字节**」+「合并导入：0/0/0（按主键跳过）」+「结论：R8 之后序列化与反序列化都活着」，无崩溃。
+5. release APK **2.69 MB**（debug 13.9 MB）。
+
+**四条新发现（`PLAN.md` §3.4 F32–F34）**：各屏自建底栏让自适应无从下手（收到外壳）、横排格子治 F21、`recordRoborazziDebug` 会被 Gradle 判"最新"而**静默不录**（要 `--rerun-tasks`，且基线必须放源码树）。
+
+**阶段状态**：`PLAN.md` §10 → P0 ✅、P1 ✅、P2 🟡（AI 未接）、P3 ✅、P4 ✅、P5 ✅、**P6 🟡（四块里已过三块半）**。
+
+**最后一公里（P6 收尾）**：`RELEASE.md` §3 检查单逐条签收、`accessibility-check` 深扫与 TalkBack 走查、Baseline Profile/启动性能、`targetSdk 36 → 37` 评估、以及 PRD 状态列一次性归档（`DELTA.md` 的分工不变）。
+
+---
+
 ## 2026-10-09 · P6 前半：相机取景 + 照片来源弹窗（补上 P3 欠的那一处）
 
 **交付**：

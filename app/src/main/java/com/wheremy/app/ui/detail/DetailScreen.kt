@@ -158,7 +158,8 @@ private fun DetailBody(summary: ItemSummary, photoPaths: List<String>) {
                 ) {
                     AsyncImage(
                         model = File(path),
-                        contentDescription = null,
+                        // 这里是一排照片（不是什么有名字的东西），给一句能听懂的说明
+                        contentDescription = "物品照片",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )

@@ -65,9 +65,6 @@ import java.io.File
 fun TreeScreen(
     /** 位置照片走外壳那颗来源弹窗（拍照 / 相册） */
     onAskForLocationPhoto: () -> Unit,
-    onOpenGallery: () -> Unit,
-    onOpenInbox: () -> Unit,
-    onOpenSettings: () -> Unit,
     vm: TreeViewModel = hiltViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -104,19 +101,6 @@ fun TreeScreen(
                     TextButton(onClick = vm::startCreate) { Text("新建") }
                 },
             )
-        },
-        bottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = WheremySpacing.sm, vertical = WheremySpacing.xs),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                TextButton(onClick = onOpenGallery) { Text("照片墙") }
-                TextButton(onClick = onOpenInbox) { Text("待归类") }
-                TextButton(onClick = {}) { Text("位置") }
-                TextButton(onClick = onOpenSettings) { Text("设置") }
-            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
@@ -275,7 +259,8 @@ private fun LocationRow(row: LocationRowUi, onOpen: () -> Unit, onMenu: () -> Un
         if (row.thumbPath != null) {
             AsyncImage(
                 model = File(row.thumbPath),
-                contentDescription = null,
+                // 无障碍：读屏说得出是哪个位置的图
+                contentDescription = "${row.node.name}的位置照片",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(48.dp)

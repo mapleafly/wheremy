@@ -9,8 +9,25 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -26,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -40,6 +58,7 @@ import com.wheremy.app.ui.camera.CameraScreen
 import com.wheremy.app.ui.camera.cameraGate
 import com.wheremy.app.ui.camera.rememberCameraSession
 import com.wheremy.app.ui.capture.CaptureViewModel
+import com.wheremy.app.ui.debug.BackupSmokeScreen
 import com.wheremy.app.ui.debug.DataSelfCheckScreen
 import com.wheremy.app.ui.debug.DevSeedScreen
 import com.wheremy.app.ui.design.DesignGalleryScreen
@@ -47,6 +66,7 @@ import com.wheremy.app.ui.detail.DetailScreen
 import com.wheremy.app.ui.gallery.GalleryScreen
 import com.wheremy.app.ui.review.ReviewScreen
 import com.wheremy.app.ui.settings.SettingsScreen
+import com.wheremy.app.ui.theme.WheremySpacing
 import com.wheremy.app.ui.tree.TreeScreen
 import com.wheremy.app.ui.tree.TreeViewModel
 import kotlinx.coroutines.Dispatchers
@@ -84,6 +104,10 @@ data object DesignGalleryKey : NavKey
 @Serializable
 data object DataSelfCheckKey : NavKey
 
+/** 开发期：备份冒烟（导出 + 合并导入各跑一次） */
+@Serializable
+data object BackupSmokeKey : NavKey
+
 /**
  * 照片的两个来源（`UI.md` §2.5）。`NONE` 表示没有在等照片。
  */
@@ -108,6 +132,7 @@ fun WheremyRoot(
         "selfcheck" -> DataSelfCheckKey
         "design" -> DesignGalleryKey
         "seed" -> DevSeedKey
+        "backupcheck" -> BackupSmokeKey
         else -> GalleryKey
     }
     val backStack = remember { mutableStateListOf(start) }
@@ -237,89 +262,148 @@ fun WheremyRoot(
         if (key != GalleryKey && backStack.lastOrNull() != key) backStack.add(key)
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         // 返回键优先级（`UI.md` §2.3）：取景屏最先接。
         // ⚠️ 不能只靠 NavDisplay 的 onBack：它只在栈深 > 1 时才拦，而取景屏叠在栈底那一屏上——
         // 真机上按返回直接把应用退了（还露出了底下的应用）。这里自己接一层。
         BackHandler(enabled = viewfinderOpen) { closeViewfinder() }
 
-        NavDisplay(
-            backStack = backStack,
-            // 返回键优先级（`UI.md` §2.3）：取景屏最先接，其余交给栈
-            onBack = {
-                if (viewfinderOpen) {
-                    closeViewfinder()
-                } else {
-                    backStack.removeLastOrNull()
-                }
-            },
-            entryProvider = entryProvider {
-                entry<GalleryKey> {
-                    GalleryScreen(
-                        inboxMode = false,
-                        showExpiringSoonOnly = entry == ReminderNotifier.ENTRY_EXPIRING,
-                        onOpenItem = { itemId -> backStack.add(DetailKey(itemId)) },
-                        onPickPhoto = askForPhotoSource,
-                        onOpenInbox = { switchTab(InboxKey) },
-                        onOpenTree = { switchTab(TreeKey) },
-                        onOpenSettings = { switchTab(SettingsKey) },
-                    )
-                }
-                entry<InboxKey> {
-                    GalleryScreen(
-                        inboxMode = true,
-                        onOpenItem = { itemId -> backStack.add(DetailKey(itemId)) },
-                        onPickPhoto = askForPhotoSource,
-                        onOpenGallery = { switchTab(GalleryKey) },
-                        onOpenTree = { switchTab(TreeKey) },
-                        onOpenSettings = { switchTab(SettingsKey) },
-                    )
-                }
-                entry<TreeKey> {
-                    TreeScreen(
-                        // 位置照片走同一颗来源弹窗（`PhotoTarget.LOCATION`）
-                        onAskForLocationPhoto = { askingFor = PhotoTarget.LOCATION },
-                        onOpenGallery = { switchTab(GalleryKey) },
-                        onOpenInbox = { switchTab(InboxKey) },
-                        onOpenSettings = { switchTab(SettingsKey) },
-                        vm = treeVm,
-                    )
-                }
-                entry<DetailKey> {
-                    // 格子上点一下进的是详情页；详情页自己没有可编辑字段，「编辑」才进确认页
-                    DetailScreen(
-                        itemId = it.itemId,
-                        onBack = { backStack.removeLastOrNull() },
-                        onEdit = { itemId -> backStack.add(ReviewKey(itemId)) },
-                    )
-                }
-                entry<ReviewKey> {
-                    // 这一屏自己不碰导航栈：只把"办完了"写进 finished，怎么落地由外壳决定
-                    ReviewScreen(
-                        itemId = it.itemId,
-                        onDone = { backStack.removeLastOrNull() },
-                        captureVm = captureVm,
-                        onReplacePhoto = askForPhotoSource,
-                    )
-                }
-                entry<SettingsKey> {
-                    SettingsScreen(
-                        onOpenDesignGallery = { backStack.add(DesignGalleryKey) },
-                        onOpenDataSelfCheck = { backStack.add(DataSelfCheckKey) },
-                        onOpenDevSeed = { backStack.add(DevSeedKey) },
-                    )
-                }
-                entry<DesignGalleryKey> {
-                    DesignGalleryScreen(onBack = { backStack.removeLastOrNull() })
-                }
-                entry<DataSelfCheckKey> {
-                    DataSelfCheckScreen(onBack = { backStack.removeLastOrNull() })
-                }
-                entry<DevSeedKey> {
-                    DevSeedScreen(onDone = { switchTo(GalleryKey) })
-                }
-            },
+        /**
+         * 窗口尺寸分级（`PLAN.md` 质量目标：手机竖/横 + 平板都要能用）。
+         *
+         * - 宽 ≥ 600dp → 底栏换成左侧 `NavigationRail`（平板/横屏不必把屏幕底边浪费掉）；
+         * - 高 < 480dp → 判为"矮窗口"（手机横屏），照片墙的格子换成**横排**——
+         *   竖排格子（1:1 图 + 三行字）在矮窗口里放不下，文字行会被挤出可视区，FAB 还会压住图（F21）。
+         */
+        val wide = maxWidth >= 600.dp
+        val shortWindow = maxHeight < 480.dp
+
+        val tabs = listOf(
+            Triple("照片墙", GalleryKey, Icons.Filled.Home),
+            Triple("位置", TreeKey, Icons.AutoMirrored.Filled.List),
+            Triple("待归类", InboxKey, Icons.Filled.Warning),
+            Triple("设置", SettingsKey, Icons.Filled.Settings),
         )
+        val current = backStack.lastOrNull()
+        val onWall = current == GalleryKey || current == InboxKey
+        val newItemFab = @Composable {
+            if (onWall) {
+                FloatingActionButton(onClick = askForPhotoSource) {
+                    Icon(Icons.Filled.Add, contentDescription = "选照片录入")
+                }
+            }
+        }
+
+        val content = @Composable { innerPadding: PaddingValues ->
+            NavDisplay(
+                modifier = Modifier.padding(innerPadding),
+                backStack = backStack,
+                // 返回键优先级（`UI.md` §2.3）：取景屏最先接，其余交给栈
+                onBack = {
+                    if (viewfinderOpen) {
+                        closeViewfinder()
+                    } else {
+                        backStack.removeLastOrNull()
+                    }
+                },
+                entryProvider = entryProvider {
+                    entry<GalleryKey> {
+                        GalleryScreen(
+                            inboxMode = false,
+                            compactHeight = shortWindow,
+                            showExpiringSoonOnly = entry == ReminderNotifier.ENTRY_EXPIRING,
+                            onOpenItem = { itemId -> backStack.add(DetailKey(itemId)) },
+                        )
+                    }
+                    entry<InboxKey> {
+                        GalleryScreen(
+                            inboxMode = true,
+                            compactHeight = shortWindow,
+                            onOpenItem = { itemId -> backStack.add(DetailKey(itemId)) },
+                        )
+                    }
+                    entry<TreeKey> {
+                        TreeScreen(
+                            // 位置照片走同一颗来源弹窗（`PhotoTarget.LOCATION`）
+                            onAskForLocationPhoto = { askingFor = PhotoTarget.LOCATION },
+                            vm = treeVm,
+                        )
+                    }
+                    entry<DetailKey> {
+                        // 格子上点一下进的是详情页；详情页自己没有可编辑字段，「编辑」才进确认页
+                        DetailScreen(
+                            itemId = it.itemId,
+                            onBack = { backStack.removeLastOrNull() },
+                            onEdit = { itemId -> backStack.add(ReviewKey(itemId)) },
+                        )
+                    }
+                    entry<ReviewKey> {
+                        // 这一屏自己不碰导航栈：只把"办完了"写进 finished，怎么落地由外壳决定
+                        ReviewScreen(
+                            itemId = it.itemId,
+                            onDone = { backStack.removeLastOrNull() },
+                            captureVm = captureVm,
+                            onReplacePhoto = askForPhotoSource,
+                        )
+                    }
+                    entry<SettingsKey> {
+                        SettingsScreen(
+                            onOpenDesignGallery = { backStack.add(DesignGalleryKey) },
+                            onOpenDataSelfCheck = { backStack.add(DataSelfCheckKey) },
+                            onOpenDevSeed = { backStack.add(DevSeedKey) },
+                        )
+                    }
+                    entry<DesignGalleryKey> {
+                        DesignGalleryScreen(onBack = { backStack.removeLastOrNull() })
+                    }
+                    entry<DataSelfCheckKey> {
+                        DataSelfCheckScreen(onBack = { backStack.removeLastOrNull() })
+                    }
+                    entry<BackupSmokeKey> {
+                        BackupSmokeScreen(onBack = { backStack.removeLastOrNull() })
+                    }
+                    entry<DevSeedKey> {
+                        DevSeedScreen(onDone = { switchTo(GalleryKey) })
+                    }
+                },
+            )
+        }
+
+        if (wide) {
+            // 宽窗口：左侧导航轨 + 右侧内容；FAB 贴内容区右下角
+            Row(modifier = Modifier.fillMaxSize()) {
+                NavigationRail {
+                    tabs.forEach { (label, key, icon) ->
+                        NavigationRailItem(
+                            selected = current == key,
+                            onClick = { switchTab(key) },
+                            icon = { Icon(icon, contentDescription = null) },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    content(PaddingValues(0.dp))
+                    Box(modifier = Modifier.align(Alignment.BottomEnd).padding(WheremySpacing.lg)) { newItemFab() }
+                }
+            }
+        } else {
+            Scaffold(
+                bottomBar = {
+                    NavigationBar {
+                        tabs.forEach { (label, key, icon) ->
+                            NavigationBarItem(
+                                selected = current == key,
+                                onClick = { switchTab(key) },
+                                icon = { Icon(icon, contentDescription = null) },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+                },
+                floatingActionButton = newItemFab,
+            ) { innerPadding -> content(innerPadding) }
+        }
 
         // ⚠️ 这里**不能**再放一个 Scaffold：它自带不透明底色，会把下面的 NavDisplay 整个遮住（真机白屏踩过）
         SnackbarHost(snackbar, modifier = Modifier.align(Alignment.BottomCenter))
