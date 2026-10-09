@@ -16,22 +16,25 @@ import java.io.File
  */
 class AnalysisTrace(private val dir: File) {
 
-    suspend fun record(outcome: String, prompt: String, response: String?) = withContext(Dispatchers.IO) {
-        runCatching {
-            dir.mkdirs()
-            val at = System.currentTimeMillis()
-            val file = File(dir, "%013d-%s.txt".format(at, outcome.take(24)))
-            file.writeText(
-                buildString {
-                    appendLine("at=$at")
-                    appendLine("outcome=$outcome")
-                    appendLine("prompt=${clip(prompt)}")
-                    appendLine("response=${clip(response.orEmpty())}")
-                },
-            )
-            trim()
+    suspend fun record(outcome: String, prompt: String, response: String?, elapsedMs: Long = 0) =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                dir.mkdirs()
+                val at = System.currentTimeMillis()
+                val file = File(dir, "%013d-%s.txt".format(at, outcome.take(24)))
+                file.writeText(
+                    buildString {
+                        appendLine("at=$at")
+                        appendLine("outcome=$outcome")
+                        // FR-TRC-05：排「超时 vs 模型慢」全靠这一行
+                        appendLine("elapsedMs=$elapsedMs")
+                        appendLine("prompt=${clip(prompt)}")
+                        appendLine("response=${clip(response.orEmpty())}")
+                    },
+                )
+                trim()
+            }
         }
-    }
 
     suspend fun count(): Int = withContext(Dispatchers.IO) {
         dir.listFiles()?.count { it.isFile } ?: 0

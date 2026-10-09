@@ -49,7 +49,31 @@ class SettingsRepositoryTest {
         assertEquals(3, settings.reminderLeadDays)
         assertEquals("", settings.apiKey)
         assertEquals("搜索字段版本默认跟上代码", SearchTextBuilder.FIELD_VERSION, settings.searchTextVersion)
+        assertEquals("还没调用过 AI", 0, settings.aiCallCount)
+        assertEquals(0L, settings.aiTokens)
         assertFalse("没 key 就不算能用", settings.hasUsableKey)
+    }
+
+    /**
+     * FR-TRC-04：累计次数与 tokens。
+     *
+     * 钉住两件事：**重试也算一次**（只算成功的话用户看到的次数会比实际花的少），
+     * 以及接口不报 tokens 时次数照涨、tokens 不动。
+     */
+    @Test
+    fun `每次尝试都记一笔，重试也算`() {
+        runBlocking {
+            repo().recordAiCall(tokens = 1200)
+            repo().recordAiCall(tokens = 800)
+            val afterTwo = repo().current()
+            assertEquals("两次调用记两次", 2, afterTwo.aiCallCount)
+            assertEquals("tokens 累加", 2000L, afterTwo.aiTokens)
+
+            repo().recordAiCall(tokens = 0)
+            val afterThree = repo().current()
+            assertEquals("接口不报 tokens 时次数照涨", 3, afterThree.aiCallCount)
+            assertEquals("tokens 不涨", 2000L, afterThree.aiTokens)
+        }
     }
 
     @Test

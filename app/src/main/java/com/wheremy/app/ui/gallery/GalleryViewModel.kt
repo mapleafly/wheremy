@@ -34,6 +34,8 @@ data class GalleryUiState(
     val moveFor: String? = null,
     val pendingDelete: PendingDelete? = null,
     val loading: Boolean = true,
+    /** 这次是不是被 `LIMIT 300` 截了（FR-FND-07）：被截了就得说出来，不能假装这就是全部。 */
+    val capped: Boolean = false,
 ) {
     /**
      * 空态第 1 句的判据（`UI.md` §3.4）：**有筛选条件时不能说"还没有物品"**。
@@ -88,14 +90,14 @@ class GalleryViewModel @Inject constructor(
         val seq = ++refreshSeq
         viewModelScope.launch {
             val current = _state.value
-            val found = items.rankedSearch(current.query, current.filters)
-            val rows = items.summaries(found).map { summary ->
+            val outcome = items.search(current.query, current.filters)
+            val rows = items.summaries(outcome.rows).map { summary ->
                 // 缩略图给界面的是绝对路径（库里存的是 PhotoStore 的相对路径）
                 summary.copy(thumbPath = summary.thumbPath?.let { items.photoStore.file(it).absolutePath })
             }
             val tags = items.allTags()
             if (seq != refreshSeq) return@launch // 有更新的刷新在飞：这次的结果已经过期，丢掉
-            _state.update { it.copy(rows = rows, tags = tags, loading = false) }
+            _state.update { it.copy(rows = rows, tags = tags, loading = false, capped = outcome.capped) }
         }
     }
 

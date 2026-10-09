@@ -43,6 +43,9 @@ data class SettingsUiState(
     val savedModel: String = "",
     val showKey: Boolean = false,
     val debugResult: String? = null,
+    /** FR-TRC-04：累计调用次数（含重试）与服务端报的 tokens 合计；费用不折算，看用户自己的账单。 */
+    val aiCalls: Int = 0,
+    val aiTokens: Long = 0L,
     val notifyProblem: String? = null,
     val notice: String? = null,
     /** 备份：忙的时候**忽略新手势**（`RULES.md` §16） */
@@ -60,6 +63,19 @@ data class SettingsUiState(
             !visionEnabled -> "开关关着，选完照片直接进手填。"
             apiKey.isBlank() || baseUrl.isBlank() || model.isBlank() -> "还缺 API key：填好保存之前，选照片都会走手填。"
             else -> "已就绪：走 $savedModel。"
+        }
+
+    /**
+     * FR-TRC-04：累计用量那行。
+     *
+     * 🔒 **只报次数与 tokens，不折算成钱**：各家的价格表会变，本机算出来的金额迟早是错的，
+     * 说错钱比不说更糟。花钱多少让用户看自己的账单。
+     */
+    val aiUsageLine: String
+        get() = if (aiCalls == 0) {
+            "还没调用过 AI。"
+        } else {
+            "累计调用 $aiCalls 次（含重试）· 服务端报的 tokens 合计 $aiTokens · 费用按你的账单为准（本机不折算）"
         }
 }
 
@@ -87,6 +103,8 @@ class SettingsViewModel @Inject constructor(
                         baseUrl = current.baseUrl.ifBlank { saved.baseUrl },
                         model = current.model.ifBlank { saved.model },
                         apiKey = current.apiKey.ifBlank { saved.apiKey },
+                        aiCalls = saved.aiCallCount,
+                        aiTokens = saved.aiTokens,
                     )
                 }
             }

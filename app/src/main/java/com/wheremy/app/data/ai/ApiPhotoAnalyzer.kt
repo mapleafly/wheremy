@@ -7,6 +7,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.IOException
@@ -24,7 +25,15 @@ import java.util.Base64
  *    （不重新序列化、不重读设置）；
  * 3. 留痕是旁路：写不进去也必须把结果还给用户。
  */
-class ApiPhotoAnalyzer(private val configProvider: suspend () -> VisionConfig?, private val trace: AnalysisTrace) {
+class ApiPhotoAnalyzer(
+    private val configProvider: suspend () -> VisionConfig?,
+    private val trace: AnalysisTrace,
+    /**
+     * 每一次尝试（含重试）报一次，参数是服务端回的 `usage.total_tokens`（没有就 0）。
+     * 默认空实现——自检与单元测试不记账。
+     */
+    private val onAttempt: suspend (Int) -> Unit = {},
+) {
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -57,14 +66,16 @@ class ApiPhotoAnalyzer(private val configProvider: suspend () -> VisionConfig?, 
                 setRequestProperty("Authorization", "Bearer ${config.apiKey}")
             }
             try {
+                val startedAt = System.currentTimeMillis()
                 connection.outputStream.use { it.write(body.toByteArray()) }
                 val code = connection.responseCode
                 val text = (if (code in 200..299) connection.inputStream else connection.errorStream)
                     ?.bufferedReader()?.use { it.readText() }.orEmpty()
-
+                val elapsedMs = System.currentTimeMillis() - startedAt
+                onAttempt(tokensOf(text))
                 val statusFailure = classifyStatus(code, text)
                 if (statusFailure != null) {
-                    trace.record(statusFailure.name, systemPrompt, text)
+                    trace.record(statusFailure.name, systemPrompt, text, elapsedMs)
                     return@withContext AnalysisOutcome.Failure(statusFailure, text)
                 }
 
@@ -82,34 +93,34 @@ class ApiPhotoAnalyzer(private val configProvider: suspend () -> VisionConfig?, 
                 // ⚠️ 先判 finish_reason == "length"：被切断时 content 是半句 JSON 甚至没有，
                 // 这时候要说的是"太长被切断"，不是"内容无法解析"
                 if (finishReason == "length") {
-                    trace.record(FailureReason.TRUNCATED.name, systemPrompt, content)
+                    trace.record(FailureReason.TRUNCATED.name, systemPrompt, content, elapsedMs)
                     return@withContext AnalysisOutcome.Failure(FailureReason.TRUNCATED, content)
                 }
                 if (content == null) {
-                    trace.record(FailureReason.BAD_RESPONSE.name, systemPrompt, text)
+                    trace.record(FailureReason.BAD_RESPONSE.name, systemPrompt, text, elapsedMs)
                     return@withContext AnalysisOutcome.Failure(FailureReason.BAD_RESPONSE, text)
                 }
 
                 val parsed = AnalysisParser.parse(content)
                 when {
                     parsed == null -> {
-                        trace.record(FailureReason.BAD_RESPONSE.name, systemPrompt, content)
+                        trace.record(FailureReason.BAD_RESPONSE.name, systemPrompt, content, elapsedMs)
                         AnalysisOutcome.Failure(FailureReason.BAD_RESPONSE, content)
                     }
 
                     parsed.items.isEmpty() && parsed.echoedItemsKey -> {
                         // 模型按提示词回了 items: []，它照做了——不能说"无法解析"
-                        trace.record(FailureReason.NOTHING_FOUND.name, systemPrompt, content)
+                        trace.record(FailureReason.NOTHING_FOUND.name, systemPrompt, content, elapsedMs)
                         AnalysisOutcome.Failure(FailureReason.NOTHING_FOUND, content)
                     }
 
                     parsed.items.isEmpty() -> {
-                        trace.record(FailureReason.BAD_RESPONSE.name, systemPrompt, content)
+                        trace.record(FailureReason.BAD_RESPONSE.name, systemPrompt, content, elapsedMs)
                         AnalysisOutcome.Failure(FailureReason.BAD_RESPONSE, content)
                     }
 
                     else -> {
-                        trace.record("success", systemPrompt, content)
+                        trace.record("success", systemPrompt, content, elapsedMs)
                         AnalysisOutcome.Success(parsed.items, content)
                     }
                 }
@@ -175,6 +186,11 @@ class ApiPhotoAnalyzer(private val configProvider: suspend () -> VisionConfig?, 
             )
         }.toString()
     }
+
+    /** 服务端回的 `usage.total_tokens`；没有这个键就 0（不是所有兼容接口都给）。 */
+    private fun tokensOf(text: String): Int = runCatching<Int> {
+        json.parseToJsonElement(text).jsonObject["usage"]!!.jsonObject["total_tokens"]!!.jsonPrimitive.int
+    }.getOrDefault(0)
 
     companion object {
         /** 📐 超时由这一处说了算——文案里**故意**不写秒数（`RULES.md` §13.2 第 1 条）。 */

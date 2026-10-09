@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.wheremy.app.data.db.SearchTextBuilder
@@ -23,6 +24,10 @@ data class Settings(
     val apiKey: String,
     val reminderLeadDays: Int,
     val searchTextVersion: Int,
+    /** 累计调用次数（含重试）——留痕只留最近 10 条，所以计数得单独存一份（FR-TRC-04）。 */
+    val aiCallCount: Int = 0,
+    /** 服务端报的 tokens 合计；接口不报就不涨。 */
+    val aiTokens: Long = 0L,
 ) {
     /** 四样齐了才算能用：开关、key、地址、模型。 */
     val hasUsableKey: Boolean
@@ -47,6 +52,8 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             apiKey = prefs[KEY_API_KEY].orEmpty(),
             reminderLeadDays = (prefs[KEY_LEAD_DAYS] ?: DEFAULT_LEAD_DAYS).coerceIn(LEAD_DAYS_MIN, LEAD_DAYS_MAX),
             searchTextVersion = prefs[KEY_SEARCH_TEXT_VERSION] ?: SearchTextBuilder.FIELD_VERSION,
+            aiCallCount = prefs[KEY_AI_CALLS] ?: 0,
+            aiTokens = prefs[KEY_AI_TOKENS] ?: 0L,
         )
     }
 
@@ -76,6 +83,17 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setSearchTextVersion(version: Int) = store.edit { it[KEY_SEARCH_TEXT_VERSION] = version }.let { }
 
+    /**
+     * 记一次调用（FR-TRC-04）。**每尝试一次算一次**——重试也是真金白银，不能只算成功的。
+     *
+     * 只数次数与 tokens，**不折算成钱**：各家的价格表会变，本机算出来的金额迟早是错的，
+     * 界面上就照实说"花费看你的账单"。
+     */
+    suspend fun recordAiCall(tokens: Int) = store.edit {
+        it[KEY_AI_CALLS] = (it[KEY_AI_CALLS] ?: 0) + 1
+        if (tokens > 0) it[KEY_AI_TOKENS] = (it[KEY_AI_TOKENS] ?: 0L) + tokens
+    }.let { }
+
     companion object {
         const val DEFAULT_BASE_URL = "https://api.deepseek.com"
         const val DEFAULT_MODEL = "deepseek-flash"
@@ -90,5 +108,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val KEY_API_KEY = stringPreferencesKey("api_key")
         val KEY_LEAD_DAYS = intPreferencesKey("reminder_lead_days")
         val KEY_SEARCH_TEXT_VERSION = intPreferencesKey("search_text_version")
+        val KEY_AI_CALLS = intPreferencesKey("ai_call_count")
+        val KEY_AI_TOKENS = longPreferencesKey("ai_token_total")
     }
 }

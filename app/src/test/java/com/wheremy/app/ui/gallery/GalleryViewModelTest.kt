@@ -3,6 +3,8 @@ package com.wheremy.app.ui.gallery
 import android.content.Context
 import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
+import com.wheremy.app.data.db.ItemEntity
+import com.wheremy.app.data.db.ItemStatus
 import com.wheremy.app.data.db.WheremyDatabase
 import com.wheremy.app.data.item
 import com.wheremy.app.data.photos.PhotoStore
@@ -95,6 +97,56 @@ class GalleryViewModelTest {
             }
             id
         }
+
+    /**
+     * FR-FND-07：`LIMIT 300` 截断发生在**打分之前**，界面必须把这件事说出来。
+     *
+     * 两边都要钉：正好撞到上限时 `capped = true`；只搜到一条时 `false`
+     * （不然用户会被一句"还有更多"骗去反复缩小范围）。
+     */
+    @Test
+    fun `搜索撞到三百条上限时界面要说出来`() {
+        val total = ItemRepository.SEARCH_LIMIT + 1
+        runBlocking {
+            // 直接写行：301 次 newDraft 会把每张照片都编三遍 JPEG，测试慢到没意义
+            repeat(total) { index ->
+                db.itemDao().upsert(
+                    ItemEntity(
+                        id = "bulk-$index",
+                        name = "物品$index",
+                        category = null,
+                        seasons = null,
+                        color = null,
+                        brand = null,
+                        material = null,
+                        aliases = null,
+                        description = null,
+                        notes = null,
+                        quantity = 1,
+                        locationId = null,
+                        status = ItemStatus.DRAFT,
+                        expiresAt = null,
+                        expireKind = null,
+                        expireNotifiedAt = null,
+                        searchText = "共用词 物品$index",
+                        createdAt = index.toLong(),
+                        updatedAt = index.toLong(),
+                        lastMovedAt = null,
+                    ),
+                )
+            }
+        }
+
+        val vm = gallery()
+        vm.onQueryChange("共用词")
+        val cappedState = awaitRows(vm, "撞上限那一次") { it.capped }
+        assertTrue("结果被 300 截断，界面要知情", cappedState.capped)
+        assertEquals(ItemRepository.SEARCH_LIMIT, cappedState.rows.size)
+
+        vm.onQueryChange("物品${total - 1}")
+        val few = awaitRows(vm, "只搜到一条") { !it.capped && it.rows.size == 1 }
+        assertFalse("没撞上限就不许说还有更多", few.capped)
+    }
 
     @Test
     fun `空查询时按插入序而不是最近更新`() {

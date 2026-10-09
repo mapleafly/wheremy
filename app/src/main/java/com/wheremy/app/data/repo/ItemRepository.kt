@@ -170,6 +170,9 @@ class ItemRepository(
         )
     }
 
+    /** 检索结果 + 一句实话：这次是不是被 `LIMIT 300` 截了（FR-FND-07）。 */
+    data class SearchOutcome(val rows: List<ItemEntity>, val capped: Boolean)
+
     /** 确认入库：名称必须非空；顺手算 `lastMovedAt` 与 `searchText`，并整批替换标签。 */
     suspend fun confirm(draft: ItemDraft) {
         val name = draft.name.trim()
@@ -261,9 +264,20 @@ class ItemRepository(
     }
 
     /** 全文搜索 + 五个筛选（AND）。**标签筛选认 `item_tag` 行**，不是 `search_text` 里的字面。 */
-    suspend fun rankedSearch(query: String, filters: Filters = Filters()): List<ItemEntity> {
+    suspend fun rankedSearch(query: String, filters: Filters = Filters()): List<ItemEntity> =
+        search(query, filters).rows
+
+    /**
+     * 与 [rankedSearch] 同一段逻辑，另外把**"是不是被 300 条截断了"**带出来（FR-FND-07）。
+     *
+     * 📐 `LIMIT 300` 发生在**打分之前**（`Daos.kt`），所以"条数正好 300"意味着很可能还有更多——
+     * 界面必须把这件事说出来，不能假装这就是全部。只对**有查询词**的那条路成立：
+     * 空查询走的是"整个库按插入顺序"，没有上限。
+     */
+    suspend fun search(query: String, filters: Filters = Filters()): SearchOutcome {
         val q = query.trim().lowercase()
         val base = if (q.isEmpty()) itemDao.all() else itemDao.searchLike("%$q%")
+        val capped = q.isNotEmpty() && base.size >= SEARCH_LIMIT
         val tagOk = if (filters.tag.isNullOrBlank()) {
             base
         } else {
@@ -271,7 +285,8 @@ class ItemRepository(
             base.filter { it.id in ids }
         }
         val filtered = tagOk.filter { matches(it, filters) }
-        return if (q.isEmpty()) filtered else SearchRanker.rank(filtered, q)
+        val rows = if (q.isEmpty()) filtered else SearchRanker.rank(filtered, q)
+        return SearchOutcome(rows = rows, capped = capped)
     }
 
     suspend fun inbox(): List<ItemEntity> = itemDao.inbox()
@@ -492,4 +507,12 @@ class ItemRepository(
         val expiresAt: Long?,
         val expireKind: String?,
     )
+
+    companion object {
+        /**
+         * 📐 与 `Daos.kt` 的 `LIMIT 300` **必须同一个数**。改这里就要改那边，反之亦然。
+         * 要一个常量是因为界面那句"只显示了前 N 条"得说得出 N（FR-FND-07）。
+         */
+        const val SEARCH_LIMIT = 300
+    }
 }

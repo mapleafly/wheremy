@@ -129,11 +129,11 @@ class TreeViewModelTest {
         val bedroom = runBlocking { locations.add(parentId = home, name = "主卧", kind = "房间") }
         val vm = tree()
         vm.open(bedroom)
-        awaitState(vm, "进到主卧") { it.currentParentId == bedroom }
+        awaitState(vm, "进到主卧") { it.currentParentId == bedroom && !it.loading }
 
         vm.up()
 
-        val back = awaitState(vm, "回到父层") { it.currentParentId == home }
+        val back = awaitState(vm, "回到父层") { it.currentParentId == home && !it.loading && it.breadcrumb == listOf("家") }
         assertEquals(listOf("家"), back.breadcrumb)
     }
 

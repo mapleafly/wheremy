@@ -51,6 +51,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.wheremy.app.data.repo.CATEGORIES
+import com.wheremy.app.data.repo.ItemRepository
 import com.wheremy.app.data.repo.ItemSummary
 import com.wheremy.app.data.repo.SEASONS
 import com.wheremy.app.ui.UiFormat
@@ -122,6 +123,21 @@ fun GalleryScreen(
             )
 
             FilterBar(state = state, expanded = expanded, onToggleExpanded = { expanded = !expanded }, vm = vm)
+
+            // FR-FND-07：`LIMIT 300` 截断发生在打分之前，所以"正好 300 条"很可能还有更多。
+            // 界面必须把这件事说出来——不然用户会以为搜到的就是全部（`RULES.md` §15 W4）。
+            if (state.capped) {
+                Text(
+                    text = "只显示了最近更新的 ${ItemRepository.SEARCH_LIMIT} 条，可能还有更多：" +
+                        "再加一个词，或者用筛选取个范围。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = WheremySpacing.lg)
+                        .testTag("capped_line"),
+                )
+            }
 
             when {
                 state.narrowing && state.rows.isEmpty() -> EmptyState("按当前的搜索和筛选没找到物品，去掉几个条件再看看。", vm)

@@ -89,6 +89,10 @@ object DataModule {
 
     @Provides
     @Singleton
-    fun apiPhotoAnalyzer(settings: SettingsRepository, trace: AnalysisTrace): ApiPhotoAnalyzer =
-        ApiPhotoAnalyzer(configProvider = { settings.currentConfig() }, trace = trace)
+    fun apiPhotoAnalyzer(settings: SettingsRepository, trace: AnalysisTrace): ApiPhotoAnalyzer = ApiPhotoAnalyzer(
+        configProvider = { settings.currentConfig() },
+        trace = trace,
+        // 每尝试一次记一次（含重试）——留痕只留最近 10 条，计数得单独存（FR-TRC-04）
+        onAttempt = { tokens -> settings.recordAiCall(tokens) },
+    )
 }

@@ -234,6 +234,12 @@ fun SettingsScreen(
                         OutlinedButton(onClick = vm::clearApiKey) { Text("清空 key") }
                     }
                     Text("填完按保存才生效。", style = MaterialTheme.typography.bodySmall)
+                    // FR-TRC-04：累计用量（只报次数与 tokens，不折算成钱——价格表会变，说错钱比不说更糟）
+                    Text(
+                        text = state.aiUsageLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.testTag("ai_usage_line"),
+                    )
                     Text(
                         "key 只存在这台手机的本地设置里：不进备份包，也不跟着任何云端同步走。换手机请先在旧机上把它清空，再重装。",
                         style = MaterialTheme.typography.bodySmall,
