@@ -1,6 +1,7 @@
 package com.wheremy.app.ui.review
 
 import com.wheremy.app.data.repo.ItemDraft
+import com.wheremy.app.ui.LocationGuessOutcome
 
 /**
  * 确认页的一个槽位（`RULES.md` §1.3–§1.5）。
@@ -34,6 +35,8 @@ data class ReviewUiState(
     val slots: List<ReviewSlot> = emptyList(),
     val selected: Int = 0,
     val analyzing: Boolean = false,
+    /** AI 失败的那一类（`RULES.md` §13）；文案由 `UiFormat.failureText` 一处生成 */
+    val failure: com.wheremy.app.data.ai.FailureReason? = null,
     val confirmExit: Boolean = false,
     val finished: Boolean = false,
     val notice: String? = null,
@@ -58,4 +61,16 @@ data class ReviewUiState(
 
     /** 没落库的槽位必须有名才允许开行；已落库的那件即使名字为空也允许按（保存是把它搬出去）。 */
     val canSave: Boolean get() = current?.let { it.itemId != null || it.draft.name.isNotBlank() } ?: false
+
+    /** 「重新分析」只在**照片已经落库**时给：没落库时没有可重跑的对象，按下去不会有任何反应（`UI.md` §6.4）。 */
+    val canRetry: Boolean get() = slots.any { it.itemId != null }
+
+    /** 位置建议的三种结局（互斥，`UI.md` §6.4）。 */
+    val guessOutcome: LocationGuessOutcome?
+        get() = when {
+            guess == null -> null
+            guessApplied -> LocationGuessOutcome.FILLED
+            placeAlreadyPicked -> LocationGuessOutcome.KEPT_USER_CHOICE
+            else -> LocationGuessOutcome.NO_MATCH
+        }
 }

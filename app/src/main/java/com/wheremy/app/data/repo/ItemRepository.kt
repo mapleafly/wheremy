@@ -99,6 +99,56 @@ class ItemRepository(
 
     suspend fun get(itemId: String): ItemEntity? = itemDao.byId(itemId)
 
+    /**
+     * 把 AI 认出来的字段写进这一件（`RULES.md` §5.2/§5.3）。
+     *
+     * 两条纪律：
+     * - **只写 AI 给得出的字段**：为 null 的一律不动，别把用户手打的字抹成空；
+     * - 位置**只在空着的时候填**（`draft.locationId == null`），已经选好位置绝不覆盖；
+     *   界面上另外用 [LocationGuessOutcome] 三句话把"为什么没改"说清楚。
+     *
+     * ⚠️ `touched` 是界面的事：这条路径**不**标记"用户动过"，否则一次 AI 回填会把整表标成手改过（§5.2）。
+     */
+    suspend fun applyAnalysis(
+        itemId: String,
+        item: com.wheremy.app.data.ai.AnalysisItem,
+        suggestedLocationId: String?,
+    ) {
+        val entity = itemDao.byId(itemId) ?: return
+        val existingTags = itemDao.tagsFor(itemId)
+        val merged = entity.copy(
+            name = item.name?.takeIf { it.isNotBlank() } ?: entity.name,
+            category = item.category?.takeIf { it.isNotBlank() } ?: entity.category,
+            seasons = item.seasons.takeIf { it.isNotEmpty() }?.let { csv(it) } ?: entity.seasons,
+            color = item.color?.takeIf { it.isNotBlank() } ?: entity.color,
+            material = item.material?.takeIf { it.isNotBlank() } ?: entity.material,
+            brand = item.brand?.takeIf { it.isNotBlank() } ?: entity.brand,
+            aliases = item.aliases.takeIf { it.isNotEmpty() }?.let { csv(it) } ?: entity.aliases,
+            description = item.description?.takeIf { it.isNotBlank() } ?: entity.description,
+            // 已经选好位置的绝不覆盖
+            locationId = entity.locationId ?: suggestedLocationId,
+            updatedAt = now(),
+        )
+        // 派生列要跟着重算（`RULES.md` §10.3：`search_text` 是写入时算出来的）
+        val tags = item.tags.takeIf { it.isNotEmpty() } ?: existingTags
+        val row = merged.copy(
+            searchText = SearchTextBuilder.build(
+                name = merged.name,
+                brand = merged.brand,
+                color = merged.color,
+                material = merged.material,
+                aliases = merged.aliases,
+                description = merged.description,
+                notes = merged.notes,
+                tags = tags,
+            ),
+        )
+        db.withWriteTransaction {
+            itemDao.upsert(row)
+            if (item.tags.isNotEmpty()) writeTags(itemId, item.tags.distinct())
+        }
+    }
+
     suspend fun draftOf(itemId: String): ItemDraft {
         val item = itemDao.byId(itemId) ?: error("物品不存在：$itemId")
         return ItemDraft(

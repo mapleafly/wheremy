@@ -1,5 +1,6 @@
 package com.wheremy.app.ui
 
+import com.wheremy.app.data.ai.FailureReason
 import com.wheremy.app.data.repo.PhotoDeletion
 import com.wheremy.app.util.daysUntil
 import java.time.Instant
@@ -40,7 +41,44 @@ object UiFormat {
             "这张照片还有别的记录在用，删掉这一件只会去掉这一件的记录，照片留着。"
         else -> "照片和记录会一起删除，无法恢复。"
     }
+
+    /**
+     * AI 失败的 11 条文案（`RULES.md` §13.2）——**逐字**，`null` 不显示。
+     *
+     * 三条写法纪律（别顺手改）：
+     * 1. `TIMEOUT` **故意不写秒数**：超时由 `ApiPhotoAnalyzer.CALL_TIMEOUT_SECONDS` 说了算；
+     * 2. `OFFLINE` **别说"已跳过"**：这条链路真发了请求（可重试的话两次），只是 `IOException` 收场；
+     * 3. 每条都带**下一步**：没有一条只说"失败了"。
+     */
+    fun failureText(reason: FailureReason?): String? = when (reason) {
+        null -> null
+        FailureReason.NO_CONFIG -> "未启用 AI（还没配 API Key），字段留空，直接手填就行"
+        FailureReason.OFFLINE -> "网络不可用，AI 没连上，先手填，联网后可以重试"
+        FailureReason.TIMEOUT -> "AI 分析超时，先手填，稍后可以重试"
+        FailureReason.UNAUTHORIZED -> "API Key 无效或被拒，先手填，换 key 后再点重新分析"
+        FailureReason.RATE_LIMITED -> "AI 服务限流，稍后再试一次"
+        FailureReason.SERVER -> "AI 服务暂不可用，可点重新分析"
+        FailureReason.BAD_RESPONSE -> "AI 返回内容无法解析，可点重新分析"
+        FailureReason.BAD_REQUEST -> "请求被服务端拒了，多半是设置里的模型名或接口地址填错，改对后再点重新分析"
+        FailureReason.INSUFFICIENT_BALANCE -> "AI 账户没有可用余额或额度，充值或换账户后再点重新分析"
+        FailureReason.TRUNCATED -> "AI 的回应太长被切断了，可点重新分析，或换一张只拍一件物品的照片"
+        FailureReason.NOTHING_FOUND -> "AI 没从照片里认出物品，字段留空，直接手填就行"
+    }
+
+    /**
+     * 位置建议的三句话（`UI.md` §6.4）——**互斥**。
+     *
+     * 🔒 光说"AI 猜的位置：橱柜"会被读成"它给了建议而界面没用"，**用户就是这么报的 bug**（批次 Z）。
+     */
+    fun locationGuessLine(guess: String, outcome: LocationGuessOutcome): String = when (outcome) {
+        LocationGuessOutcome.FILLED -> "AI 猜的位置：$guess（已填进「放在哪里」）"
+        LocationGuessOutcome.KEPT_USER_CHOICE -> "AI 猜的是「$guess」，这件已经选好位置了，没有改动"
+        LocationGuessOutcome.NO_MATCH -> "AI 猜的是「$guess」，你的位置里没有对得上的，需要的话点「选择」新建一个"
+    }
 }
+
+/** 位置建议的三种结局（`RULES.md` §5.3/§5.4）。 */
+enum class LocationGuessOutcome { FILLED, KEPT_USER_CHOICE, NO_MATCH }
 
 /**
  * 待删除的那一件：**id 和那句话一起存**。

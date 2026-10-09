@@ -37,7 +37,7 @@
 | release 变体 | `isMinifyEnabled = true` + `isShrinkResources = true`，keep 规则在 `app/proguard-rules.pro`；**签名暂用调试签名**（⭐FR-RLS-01 未完成，见 §3.2） | `app/build.gradle.kts` |
 | R8 冒烟变体 | `.r8smoke`（规则同 release、包名多一个后缀）——**不能直装 release**：它的包名与参照实现那个应用同名 | 同上 |
 | `allowBackup` | `"false"` 🔒（在 release APK 的清单里核过） | `AndroidManifest.xml` |
-| 权限 | 自己声明：`POST_NOTIFICATIONS` + `CAMERA`；**没有任何存储权限**（选图走 SAF/Picker）。合并清单里另有 WorkManager 带进来的 `WAKE_LOCK` / `ACCESS_NETWORK_STATE` / `RECEIVE_BOOT_COMPLETED` / `FOREGROUND_SERVICE`。⚠️ **还没声明 `INTERNET`**——AI 那一节落地（P2）时再加，现在加了也没人用 | `aapt2 dump badging`（release APK） |
+| 权限 | 自己声明：`POST_NOTIFICATIONS` + `CAMERA`；**没有任何存储权限**（选图走 SAF/Picker）。合并清单里另有 WorkManager 带进来的 `WAKE_LOCK` / `ACCESS_NETWORK_STATE` / `RECEIVE_BOOT_COMPLETED` / `FOREGROUND_SERVICE`。`INTERNET` 已在 P2 落地时补上（F36） | `aapt2 dump badging`（release APK） |
 | DB schema 号 | `DB_SCHEMA_VERSION = 1`，`exportSchema = true`；**没有 `fallbackToDestructiveMigration`**（⭐FR-DB-01 已按 §3.1 满足） | `WheremyDatabase.kt` |
 | 构建入口 | **仓库里有 wrapper**（`gradlew.bat` / `gradlew`）；命令行与 CI 都用它 | 仓库根 |
 | CI | GitHub Actions：`spotlessCheck` → `testDebugUnitTest` → `verifyRoborazziDebug` → `assembleRelease`（⚠️ 尚未在真实 GitHub 上跑过） | `.github/workflows/ci.yml` |
@@ -111,7 +111,7 @@
 
 **为什么必须**：`PRD.md` FR-PRM-01 要求「权限清单最小」，多一条就推翻这条需求。
 **怎么算做完**：① 数 `AndroidManifest.xml` 里的 `<uses-permission>`；② 装机后在系统「应用信息 → 权限」里对照；③ 核**合并后**的清单（`aapt2 dump badging <apk>`），把库带进来的也认一遍。
-**本实现的情况**：✅ 自己声明只有 `POST_NOTIFICATIONS` + `CAMERA`，**无存储权限**；合并清单里有 4 条来自 WorkManager 的传递依赖（`WAKE_LOCK` / `ACCESS_NETWORK_STATE` / `RECEIVE_BOOT_COMPLETED` / `FOREGROUND_SERVICE`），已在 §2.1 记明。⚠️ `INTERNET` 还没声明：AI 一节落地（P2）时加。
+**本实现的情况**：✅ 自己声明 `POST_NOTIFICATIONS` + `CAMERA` + `INTERNET`，**无存储权限**；合并清单里另有 4 条来自 WorkManager 的传递依赖，已在 §2.1 记明。⚠️ `INTERNET` 是 P2 真机连模型时才补上的（F36）：少了它，IO 异常会被判成 `OFFLINE`，界面就说"网络不可用"——一句假话。
 **谁签收**：测试（真机那一遍）+ 软件经理（清单那一遍）。
 
 ### 3.5 `allowBackup="false"` 复核
@@ -411,7 +411,7 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 | 2 | 版本号 | ✅ | `1` / `0.1.0`（首个交付版，未发布过，不需要 +1） |
 | 3 | ⭐ 七项签收 | 🟡 | §3 逐条写了状态：3.1 ✅、3.2 ⬜（要用户的 keystore）、3.3–3.6 ✅、3.7 ⬜（首版无旧包） |
 | 4 | schema 变更流程 | ✅ 不适用 | 本次没动 schema；`DB_SCHEMA_VERSION = 1` 且**没有** `fallbackToDestructiveMigration` |
-| 5 | 权限复核 | ✅ | 自己声明 `POST_NOTIFICATIONS` + `CAMERA`，无存储权限；合并清单另有 WorkManager 四条（§2.1 已记）。⚠️ `INTERNET` 等 P2 |
+| 5 | 权限复核 | ✅ | 自己声明 `POST_NOTIFICATIONS` + `CAMERA` + `INTERNET`，无存储权限；合并清单另有 WorkManager 四条（§2.1 已记） |
 | 6 | `allowBackup="false"` | ✅ | 源码 + **release APK 清单**两处核过 |
 | 7 | 文档同步 | ✅ | `PLAN.md` §10 阶段表、`DELTA.md` §3、`CHANGELOG.md`、本轮 `RELEASE.md` 全部更新 |
 | 8 | 单测 `BUILD SUCCESSFUL` | ✅ | `./gradlew.bat :app:spotlessCheck :app:testDebugUnitTest :app:assembleDebug --rerun-tasks` → `BUILD SUCCESSFUL` |

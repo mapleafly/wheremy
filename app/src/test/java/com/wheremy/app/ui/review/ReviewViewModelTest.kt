@@ -3,6 +3,8 @@ package com.wheremy.app.ui.review
 import android.content.Context
 import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
+import com.wheremy.app.data.ai.AnalysisTrace
+import com.wheremy.app.data.ai.ApiPhotoAnalyzer
 import com.wheremy.app.data.db.ItemStatus
 import com.wheremy.app.data.db.WheremyDatabase
 import com.wheremy.app.data.photos.PhotoStore
@@ -63,7 +65,13 @@ class ReviewViewModelTest {
         items = ItemRepository(db, store)
         locations = LocationRepository(db, store)
         flow = CaptureFlow(items)
-        vm = ReviewViewModel(items, locations, flow)
+        // 测试里**不连网**：配置给 null → AI 那条路走 NO_CONFIG，表单照旧能手填
+        vm = ReviewViewModel(
+            items,
+            locations,
+            flow,
+            ApiPhotoAnalyzer({ null }, AnalysisTrace(File(tmp.root, "ai-trace"))),
+        )
     }
 
     @After

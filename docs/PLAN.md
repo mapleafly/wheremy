@@ -194,6 +194,8 @@ D:\src\dsh\wheremy\
 | F33 | 横屏照片墙只露图、文字行看不见（F21 的根因） | 矮窗口（高 < 480dp）把格子换成**横排**（缩略图左 + 三行字右）并把网格最小宽度提到 260dp；真机横屏截图确认文字行回来了 |
 | F34 | `recordRoborazziDebug` **静默没录**：Gradle 认为测试任务是最新的，直接跳过 | 录基线要带 `--rerun-tasks`；另外基线路径要从 `build/` 挪到 `app/src/test/screenshots/`，否则回归图不入库、CI 无从比对 |
 | F35 | **应用根本没有桌面图标**：`res/` 里没有任何 mipmap、清单里也没写 `android:icon` → 抽屉里显示系统默认的绿色机器人 | 查 `REBUILD.md` §6 第 6 条时在真机抽屉里发现。补三份自适应图标（`mipmap-anydpi-v26/ic_launcher.xml` + 前景矢量 + 背景色 `#00695C`）与清单的 `android:icon`；并把"**前景每个坐标到圆心 ≤33**"这条安全区不变项做成 `LauncherIconTest`（前景只用 M/L/Z，好让每个数字都是坐标） |
+| F36 | **清单里没有 `INTERNET`**：没有它，`openConnection` 抛的 IO 异常被归类成 `OFFLINE`，真机上显示「网络不可用，AI 没连上」，而网络好好的 | P2 真机连模型那一跑撞出来的假话（NFR-02 违例）。补权限；教训：**"网络不可用"这句话只有真连一次才有资格说** |
+| F37 | 从相册选进来的那张是"相机界面截图"，模型回 `{"items": []}` | **不是缺陷**：照片里确实没有可归置的物品，模型判断正确。留痕（`files/ai-trace/*.txt` 里的 `outcome` 与 `response` 原文）让"是模型说的还是我们解析坏了"一眼可判——这正是留痕存在的理由 |
 | F17 | 确认页的协程测试**不能用虚拟时间的 `runTest`**：VM 跑在 `viewModelScope`（Main），Room 的挂起查询在它自己的线程池上完成，`runTest` 会在结果回来之前结束 | 测试改成 `Dispatchers.setMain(Dispatchers.Unconfined)` + 轮询等待（`ReviewViewModelTest` 的 `awaitState`）；另有一条"用名字等待会匹配到旧槽位"的竞态要避免（改等 `saved == false`） |
 | F22 | 开发期脚手架要能**从命令行直接拉起**，别塞进产品界面 | `MainActivity` 读 `intent.getStringExtra("dev")`（`selfcheck` / `design` / `seed`）；产品界面里只在「设置」占位页留入口 |
 

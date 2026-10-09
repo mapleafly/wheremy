@@ -2,6 +2,8 @@ package com.wheremy.app.di
 
 import android.content.Context
 import com.wheremy.app.BuildConfig
+import com.wheremy.app.data.ai.AnalysisTrace
+import com.wheremy.app.data.ai.ApiPhotoAnalyzer
 import com.wheremy.app.data.backup.BackupRepository
 import com.wheremy.app.data.db.WheremyDatabase
 import com.wheremy.app.data.photos.PhotoStore
@@ -74,4 +76,19 @@ object DataModule {
         // 解包暂存目录：刻意在 photos/ 下面（它的两个正式目录之外），覆盖导入的清理不会误删它
         stagingDir = File(photoStore.rootDir, ".incoming"),
     )
+
+    /**
+     * AI 留痕 + 照片分析（`RULES.md` §13）。
+     *
+     * 留痕目录**刻意不在 `files/photos` 底下**：那样它会随备份包出门。
+     */
+    @Provides
+    @Singleton
+    fun analysisTrace(@ApplicationContext context: Context): AnalysisTrace =
+        AnalysisTrace(File(context.filesDir, AnalysisTrace.DIR_NAME))
+
+    @Provides
+    @Singleton
+    fun apiPhotoAnalyzer(settings: SettingsRepository, trace: AnalysisTrace): ApiPhotoAnalyzer =
+        ApiPhotoAnalyzer(configProvider = { settings.currentConfig() }, trace = trace)
 }

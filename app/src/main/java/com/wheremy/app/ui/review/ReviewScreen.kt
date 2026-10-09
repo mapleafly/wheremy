@@ -51,6 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.wheremy.app.data.repo.CATEGORIES
 import com.wheremy.app.data.repo.EXPIRE_KINDS
 import com.wheremy.app.data.repo.SEASONS
+import com.wheremy.app.ui.UiFormat
 import com.wheremy.app.ui.capture.CaptureViewModel
 import com.wheremy.app.ui.theme.WheremySpacing
 import java.io.File
@@ -161,7 +162,7 @@ fun ReviewScreen(
                 onPick = onReplacePhoto,
             )
 
-            AiStatusLine(state = state)
+            AiStatusLine(state = state, onRetry = vm::retryAnalysis)
 
             OutlinedTextField(
                 value = cur.draft.name,
@@ -363,9 +364,16 @@ private fun PhotoArea(thumbPath: String?, hasStoredItem: Boolean, onPick: () -> 
     }
 }
 
-/** AI 状态行（`UI.md` §6.4）：分析中一句话 + 进度条；不在分析时位置话三句互斥。 */
+/**
+ * AI 状态行（`UI.md` §6.4）：分析中一句话 + 进度条；失败给那一条文案 + 「重新分析」；
+ * 都没事时位置话**三句互斥**（文案由 `UiFormat` 一处生成）。
+ *
+ * 🔒 那一句必须带 `Modifier.weight(1f)`：不给权重会在 Row 里先按整行宽度被量走，
+ * 「重新分析」剩 0 宽竖成一列——真机上的形状 bug（批次 AI）。
+ */
 @Composable
-private fun AiStatusLine(state: ReviewUiState) {
+private fun AiStatusLine(state: ReviewUiState, onRetry: () -> Unit) {
+    val failureText = UiFormat.failureText(state.failure)
     when {
         state.analyzing -> {
             Column(verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs)) {
@@ -374,14 +382,37 @@ private fun AiStatusLine(state: ReviewUiState) {
             }
         }
 
-        state.guess != null -> {
-            val guess = state.guess
-            val line = when {
-                state.guessApplied -> "AI 猜的位置：$guess（已填进「放在哪里」）"
-                state.placeAlreadyPicked -> "AI 猜的是「$guess」，这件已经选好位置了，没有改动"
-                else -> "AI 猜的是「$guess」，你的位置里没有对得上的，需要的话点「选择」新建一个"
+        failureText != null -> {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = failureText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f),
+                )
+                // 照片没落库时没有可重跑的对象，按下去不会有任何反应
+                if (state.canRetry) {
+                    TextButton(onClick = onRetry) { Text("重新分析") }
+                }
             }
-            Text(text = line, style = MaterialTheme.typography.bodySmall)
+        }
+
+        state.guess != null -> {
+            // 三句话互斥（`UiFormat.locationGuessLine`）：光说"AI 猜的位置：橱柜"会被读成
+            // "它给了建议而界面没用"——用户就是这么报的 bug（批次 Z）
+            val outcome = state.guessOutcome
+            if (outcome != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = UiFormat.locationGuessLine(state.guess, outcome),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (state.canRetry) {
+                        TextButton(onClick = onRetry) { Text("重新分析") }
+                    }
+                }
+            }
         }
     }
 }

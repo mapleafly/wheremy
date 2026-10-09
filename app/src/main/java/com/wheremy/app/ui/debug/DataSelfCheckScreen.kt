@@ -32,6 +32,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.exifinterface.media.ExifInterface
 import androidx.room3.Room
+import com.wheremy.app.data.ai.AnalysisTrace
+import com.wheremy.app.data.ai.ApiPhotoAnalyzer
 import com.wheremy.app.data.db.ItemEntity
 import com.wheremy.app.data.db.ItemPhotoEntity
 import com.wheremy.app.data.db.ItemStatus
@@ -262,6 +264,8 @@ private suspend fun runP2SelfCheck(context: Context): List<String> {
     val items = ItemRepository(db, store)
     val locations = LocationRepository(db, store)
     val flow = CaptureFlow(items)
+    // 自检**不连网**：配置给 null，于是 AI 那条路直接走 NOTHING_FOUND/NO_CONFIG 分支
+    val analyzer = ApiPhotoAnalyzer({ null }, AnalysisTrace(File(context.cacheDir, "selfcheck-ai-trace")))
 
     try {
         // ① 选图那一刻就落库
@@ -276,7 +280,7 @@ private suspend fun runP2SelfCheck(context: Context): List<String> {
         out += if (items.inbox().any { it.id == itemId }) "✅ 未保存的件出现在待归类" else "❌ 待归类里没有它"
 
         // ② 确认页状态机：改名 → 保存
-        val vm = ReviewViewModel(items, locations, flow)
+        val vm = ReviewViewModel(items, locations, flow, analyzer)
         vm.start(itemId)
         awaitState(vm) { it.current != null }
         val canSaveBefore = vm.state.value.canSave
@@ -300,7 +304,7 @@ private suspend fun runP2SelfCheck(context: Context): List<String> {
         // 选了位置再确认，这才该离开待归类
         val home = locations.add(parentId = null, name = "自检家", kind = "房间")
         val placedId = flow.capture(jpegWithOrientation(700, 350, ExifInterface.ORIENTATION_NORMAL)) {}.itemId
-        val vmPlaced = ReviewViewModel(items, locations, flow)
+        val vmPlaced = ReviewViewModel(items, locations, flow, analyzer)
         vmPlaced.start(placedId)
         awaitState(vmPlaced) { it.current != null }
         vmPlaced.setName("自检电钻二号")
@@ -316,7 +320,7 @@ private suspend fun runP2SelfCheck(context: Context): List<String> {
 
         // ③ 稍后处理：写字段但留在待归类
         val laterId = flow.capture(jpegWithOrientation(600, 300, ExifInterface.ORIENTATION_NORMAL)) {}.itemId
-        val vm2 = ReviewViewModel(items, locations, flow)
+        val vm2 = ReviewViewModel(items, locations, flow, analyzer)
         vm2.start(laterId)
         awaitState(vm2) { it.current != null }
         vm2.setName("自检护照")
@@ -333,7 +337,7 @@ private suspend fun runP2SelfCheck(context: Context): List<String> {
         // ④ 空壳回收：什么都没动就退出 → 行与文件都不留
         val shellId = flow.capture(jpegWithOrientation(500, 500, ExifInterface.ORIENTATION_NORMAL)) {}.itemId
         val shellPath = items.photosOf(shellId).single().filePath
-        val vm3 = ReviewViewModel(items, locations, flow)
+        val vm3 = ReviewViewModel(items, locations, flow, analyzer)
         vm3.start(shellId)
         awaitState(vm3) { it.current != null }
         vm3.requestExit()

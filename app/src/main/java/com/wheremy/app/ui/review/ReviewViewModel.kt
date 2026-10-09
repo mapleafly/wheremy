@@ -2,9 +2,15 @@ package com.wheremy.app.ui.review
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.wheremy.app.data.ai.AnalysisOutcome
+import com.wheremy.app.data.ai.ApiPhotoAnalyzer
+import com.wheremy.app.data.ai.FailureReason
+import com.wheremy.app.data.ai.Prompt
 import com.wheremy.app.data.repo.ItemRepository
 import com.wheremy.app.data.repo.LocationRepository
 import com.wheremy.app.domain.CaptureFlow
+import com.wheremy.app.domain.LocationPath
+import com.wheremy.app.domain.SuggestLocationUseCase
 import com.wheremy.app.domain.buildLocationTree
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +31,7 @@ class ReviewViewModel @Inject constructor(
     private val items: ItemRepository,
     private val locations: LocationRepository,
     private val captureFlow: CaptureFlow,
+    private val analyzer: ApiPhotoAnalyzer,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReviewUiState())
@@ -45,7 +52,7 @@ class ReviewViewModel @Inject constructor(
         }
     }
 
-    /** 打开这一屏：把刚落库的那件读成槽位。 */
+    /** 打开这一屏：把刚落库的那件读成槽位，然后**顺手分析一次**（`UI.md` §6.4）。 */
     fun start(itemId: String) {
         viewModelScope.launch {
             val draft = items.draftOf(itemId)
@@ -57,6 +64,90 @@ class ReviewViewModel @Inject constructor(
                 locationPath = locationPathOf(draft.locationId),
             )
             _state.update { it.copy(slots = listOf(slot), selected = 0, finished = false) }
+            analyze(itemId)
+        }
+    }
+
+    /** 「重新分析」：与进门那次走**同一段**逻辑（照片不在库里就说明下一步）。 */
+    fun retryAnalysis() {
+        val itemId = _state.value.current?.itemId ?: return
+        viewModelScope.launch {
+            if (items.photoBytesOf(itemId) == null && items.takePendingAnalysis() == null) {
+                _state.update { it.copy(analyzing = false, failure = null, notice = "找不到这张照片了，重新选一张试试") }
+                return@launch
+            }
+            analyze(itemId)
+        }
+    }
+
+    /**
+     * 分析一次并回填（`RULES.md` §5.2–§5.6、§13）。
+     *
+     * 三件事按顺序做：
+     * 1. 提示词**算一次**，发出去的那份与留痕里的那份是同一串字；
+     * 2. 位置建议只在空着的时候填，三句话由界面用 `guessOutcome` 说（§5.3/§5.4）；
+     * 3. AI 回填**不标记** `touched`——否则一次回填会把整表标成"用户动过"（§5.2）。
+     */
+    private suspend fun analyze(itemId: String) {
+        val jpeg = items.takePendingAnalysis() ?: items.photoBytesOf(itemId)
+        if (jpeg == null) {
+            _state.update { it.copy(analyzing = false, notice = "找不到这张照片了，重新选一张试试") }
+            return
+        }
+        _state.update {
+            it.copy(analyzing = true, failure = null, guess = null, guessApplied = false, placeAlreadyPicked = false)
+        }
+
+        val all = locations.all()
+        val tree = buildLocationTree(all)
+        val selectable = all
+            .filter { it.parentId != null }
+            .map { node ->
+                LocationPath(
+                    id = node.id,
+                    path = tree.breadcrumb(node.id),
+                    name = node.name,
+                    kind = node.kind,
+                    depth = tree.pathOf(node.id).size - 1,
+                )
+            }
+        val prompt = Prompt.build(selectable.map { it.path })
+
+        when (val outcome = analyzer.analyze(jpeg, prompt)) {
+            is AnalysisOutcome.Failure ->
+                _state.update { it.copy(analyzing = false, failure = outcome.reason) }
+
+            is AnalysisOutcome.Success -> {
+                val first = outcome.items.firstOrNull()
+                if (first == null) {
+                    _state.update { it.copy(analyzing = false, failure = FailureReason.NOTHING_FOUND) }
+                    return
+                }
+                val current = items.get(itemId)
+                val alreadyPicked = current?.locationId != null
+                val matchId = SuggestLocationUseCase.suggest(selectable, first.containerGuess)
+                items.applyAnalysis(itemId, first, matchId)
+                val guessPath = matchId?.let { id -> selectable.firstOrNull { it.id == id }?.path }
+
+                // 重读一遍库里的行：界面显示的就是真落库的那份
+                val refreshed = items.draftOf(itemId)
+                _state.update { state ->
+                    state.copy(
+                        analyzing = false,
+                        failure = null,
+                        slots = state.slots.map {
+                            if (it.itemId == itemId) {
+                                it.copy(draft = refreshed, locationPath = locationPathOf(refreshed.locationId))
+                            } else {
+                                it
+                            }
+                        },
+                        guess = guessPath,
+                        guessApplied = guessPath != null && !alreadyPicked,
+                        placeAlreadyPicked = alreadyPicked,
+                    )
+                }
+            }
         }
     }
 

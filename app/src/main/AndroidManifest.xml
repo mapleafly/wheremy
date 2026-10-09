@@ -5,6 +5,13 @@
     <!-- 到期提醒要发通知；🔒 不给就地申请（HyperOS 会静默驳回），只在设置页引导去系统页 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+      AI 分析要发 HTTP 请求（`PRD.md` FR-PRM-01 的第三条）。
+      ⚠️ 少了它，`openConnection` 抛出来的 IO 异常会被判成 `OFFLINE`——真机上看到的
+      就是"网络不可用，AI 没连上"，而其实网络好好的（这一点是 P2 真机验证时才撞出来的）。
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- 取景：只要相机权限，不读相册（相册走系统选图器，用不着任何权限） -->
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- required=false：相机可以没有，那种机器上取景屏说"这台机器没有可用的相机"，其余功能照用 -->
