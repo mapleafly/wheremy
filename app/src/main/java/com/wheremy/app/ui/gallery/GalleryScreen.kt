@@ -69,6 +69,7 @@ import java.io.File
 @Composable
 fun GalleryScreen(
     inboxMode: Boolean = false,
+    showExpiringSoonOnly: Boolean = false,
     onOpenItem: (String) -> Unit,
     onPickPhoto: () -> Unit,
     onOpenGallery: () -> Unit = {},
@@ -82,6 +83,9 @@ fun GalleryScreen(
 
     // 待归类页：标题 + **收件箱谓词**一起切（只改标题会把全库列出来——第一版就是这么错的）
     LaunchedEffect(inboxMode) { vm.setInboxMode(inboxMode) }
+
+    // 从到期通知点进来：直接筛"快到期/已过期"，并把上一屏的筛选清掉
+    LaunchedEffect(showExpiringSoonOnly) { if (showExpiringSoonOnly) vm.showExpiringSoonOnly() }
 
     // 列表在菜单打开期间被刷新（例如删除后重读）→ 旧 id 直接丢掉菜单状态，
     // 否则会拿旧名字配新数据

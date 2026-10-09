@@ -111,6 +111,21 @@ class GalleryViewModel @Inject constructor(
         refresh()
     }
 
+    /**
+     * 从到期通知点进来（`RULES.md` §11.4）。
+     *
+     * 🔒 **清掉 query 与 category/season/tag**：用户从通知点进来要的是"这些到期的"，不是上一屏的筛选。
+     */
+    fun showExpiringSoonOnly() {
+        _state.update {
+            it.copy(
+                query = "",
+                filters = Filters(expireUntil = expireWindowEnd(it.leadDays)),
+            )
+        }
+        refresh()
+    }
+
     fun onQueryChange(query: String) {
         _state.update { it.copy(query = query) }
         refresh()

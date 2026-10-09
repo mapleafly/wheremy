@@ -3,32 +3,18 @@ package com.wheremy.app.ui
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
+import com.wheremy.app.reminder.ReminderNotifier
 import com.wheremy.app.ui.capture.CaptureViewModel
 import com.wheremy.app.ui.debug.DataSelfCheckScreen
 import com.wheremy.app.ui.debug.DevSeedScreen
@@ -36,7 +22,7 @@ import com.wheremy.app.ui.design.DesignGalleryScreen
 import com.wheremy.app.ui.detail.DetailScreen
 import com.wheremy.app.ui.gallery.GalleryScreen
 import com.wheremy.app.ui.review.ReviewScreen
-import com.wheremy.app.ui.theme.WheremySpacing
+import com.wheremy.app.ui.settings.SettingsScreen
 import com.wheremy.app.ui.tree.TreeScreen
 import kotlinx.serialization.Serializable
 
@@ -76,7 +62,12 @@ data object DataSelfCheckKey : NavKey
  * 也可以用 `adb shell am start -n …/.MainActivity --es dev selfcheck` 直接拉起来。
  */
 @Composable
-fun WheremyRoot(devRoute: String? = null, captureVm: CaptureViewModel = hiltViewModel()) {
+fun WheremyRoot(
+    devRoute: String? = null,
+    /** 通知点进来的落点：`expiring` → 筛过"快到期/已过期"的照片墙 */
+    entry: String? = null,
+    captureVm: CaptureViewModel = hiltViewModel(),
+) {
     val context = LocalContext.current
     val start: NavKey = when (devRoute) {
         "selfcheck" -> DataSelfCheckKey
@@ -85,6 +76,14 @@ fun WheremyRoot(devRoute: String? = null, captureVm: CaptureViewModel = hiltView
         else -> GalleryKey
     }
     val backStack = remember { mutableStateListOf(start) }
+
+    // 从通知点进来（可能应用已经在别的屏上）：先回照片墙，再由它把"快到期/已过期"筛上
+    LaunchedEffect(entry) {
+        if (entry == ReminderNotifier.ENTRY_EXPIRING) {
+            backStack.clear()
+            backStack.add(GalleryKey)
+        }
+    }
     val captured by captureVm.captured.collectAsStateWithLifecycle()
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -114,6 +113,7 @@ fun WheremyRoot(devRoute: String? = null, captureVm: CaptureViewModel = hiltView
             entry<GalleryKey> {
                 GalleryScreen(
                     inboxMode = false,
+                    showExpiringSoonOnly = entry == ReminderNotifier.ENTRY_EXPIRING,
                     onOpenItem = { itemId -> backStack.add(DetailKey(itemId)) },
                     onPickPhoto = launchPicker,
                     onOpenInbox = { switchTo(InboxKey) },
@@ -151,8 +151,7 @@ fun WheremyRoot(devRoute: String? = null, captureVm: CaptureViewModel = hiltView
                 ReviewScreen(onDone = { backStack.removeLastOrNull() })
             }
             entry<SettingsKey> {
-                SettingsPlaceholderScreen(
-                    onBack = { backStack.removeLastOrNull() },
+                SettingsScreen(
                     onOpenDesignGallery = { backStack.add(DesignGalleryKey) },
                     onOpenDataSelfCheck = { backStack.add(DataSelfCheckKey) },
                     onOpenDevSeed = { backStack.add(DevSeedKey) },
@@ -169,43 +168,4 @@ fun WheremyRoot(devRoute: String? = null, captureVm: CaptureViewModel = hiltView
             }
         },
     )
-}
-
-/** 设置页占位（真正的三节在 P5：到期提醒 / AI 分析照片 / 备份）。 */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SettingsPlaceholderScreen(
-    onBack: () -> Unit,
-    onOpenDesignGallery: () -> Unit,
-    onOpenDataSelfCheck: () -> Unit,
-    onOpenDevSeed: () -> Unit,
-) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("设置") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(WheremySpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(WheremySpacing.md),
-        ) {
-            Text(
-                text = "设置页的三节（到期提醒 / AI 分析照片 / 备份）在 P5 实现。",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            OutlinedButton(onClick = onOpenDesignGallery) { Text("看设计系统（开发期）") }
-            OutlinedButton(onClick = onOpenDataSelfCheck) { Text("数据层自检（开发期）") }
-            OutlinedButton(onClick = onOpenDevSeed) { Text("生成演示数据（开发期）") }
-        }
-    }
 }

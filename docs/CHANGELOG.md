@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-10-09 · P5 前半：设置页 + 到期提醒
+
+**交付**：
+
+| 文件 | 内容 |
+|---|---|
+| `data/settings/SettingsRepository.kt` | DataStore（`wheremy_settings`）六项：`visionEnabled` / `baseUrl` / `model` / **`apiKey`** / `reminderLeadDays` / `searchTextVersion`；默认值 `https://api.deepseek.com`、`deepseek-flash`、`3` 天；**上下界在写入侧就 `coerceIn(0, 365)`**；`hasUsableKey`＝四样齐；`currentConfig()` 不可用时给 null |
+| `data/db/Daos.kt` | `expiringBy`（三分支各挡一种骚扰：`IS NULL` / `<windowStart AND expiresAt ∈ [今天,明天)` / 过期且已说过的**不进来**）、`expiringIgnoringNotified`（**只放宽"今天说过几次"**，不翻沉默的旧账）、`markExpireNotified`（只写命中集合） |
+| `domain/ReminderEngine.kt` | 窗口三值（`windowStart` / `todayEnd` / `expireWindowEnd`）、按 `expiresAt` 升序取最早、正文**四变体逐字** |
+| `reminder/ReminderNotifier.kt` | 频道 `wheremy_expire`「到期提醒」、`NOTIFICATION_ID = 1001`、`setAutoCancel`、点通知带 `entry=expiring`；`notifyProblem` 两种理由**逐字**；🔒 **不就地申请权限**，两种理由共用「去系统设置打开」 |
+| `reminder/ReminderRunner.kt` + `ReminderWorker.kt` | 跑一次的**同一段逻辑**（Worker 与调试按钮共用）；🔒 **发不出去就不回写**；`runOnce` 返回的那句话就是 debug 区全部内容；`PeriodicWorkRequestBuilder<ReminderWorker>(1, DAYS)` + `enqueueUniquePeriodicWork(…, KEEP)`，**改设置不重排班**，没有 BootReceiver |
+| `ui/settings/SettingsScreen.kt` + VM | 两节：**到期提醒**（当前值行「当天到期提醒」/「提前 N 天提醒」、±、八颗预设、每天一次的说明、调试按钮、通知发不出去时的提示与按钮）与 **AI 分析照片**（开关 + 三态说明加粗 + 三个字段 + 保存 + 隐私句逐字）；开发期工具收进「开发期工具」卡 |
+| 外壳 | `SettingsKey` 接上真设置页（删掉占位屏）；`MainActivity` 读通知落点并补 `onNewIntent`；`WheremyRoot` 按 `entry` 先回照片墙；`WheremyApp` 建频道 + 排班 + **搜索字段版本变了才补算** |
+| 构建 | 新增 `work-runtime-ktx` + `hilt-work`/`hilt-compiler`（`@HiltWorker`）+ 摘掉 WorkManager 默认初始化器（`Configuration.Provider`） |
+
+**判绿双证**：**23 类 / 145 例**、`freshXml=23/23`、`failures=0 errors=0`、Spotless 通过。
+
+**真机验证**（截图 `artifacts/screenshots/P5/`）：
+
+1. 设置页两节文案全对（含「还缺 API key：填好保存之前，选照片都会走手填。」与「通知未开启，到期只在应用内标记」+「去系统设置打开」）。
+2. 调试按钮两条路径：没权限 → `2 件临近到期，但通知发不出去：通知未开启，到期只在应用内标记`；`pm grant` 之后同一条 → `已发一条通知：2 件物品到期或已过期，最早的已过期 3 天`。**同一批 2 件第二次仍在窗口里**——这就是"发不出去就不回写"的端到端证据。
+3. 通知真落到了系统：`dumpsys notification` 里有 `id=1001`、`channel=wheremy_expire`、`flags=AUTO_CANCEL`。
+4. 提前天数改成「30 天」→ 杀进程 → 重进仍是「提前 30 天提醒」（**文件形态的持久化**，补上 F23 那个测试环境缺口）。
+5. `entry=expiring` 冷启动 → 照片墙自动筛「更多筛选 · 快到期/已过期」，只剩 `牛奶`（还剩 2 天）与 `过期电池`（已经过期 3 天）。
+
+**三条新发现（`PLAN.md` §3.4 F23–F25）**：DataStore 在 Windows 上的改名覆盖坑（测试用内存 store、真机兜持久化）、两个时钟（统一成一个 `now`）、运行中点通知的落点（补 `onNewIntent`）。
+
+**阶段状态**：`PLAN.md` §10 → P0 ✅、P1 ✅、P2 🟡（AI 未接）、P3 ✅、P4 ✅、**P5 🟡（设置页 + 提醒已完成，备份未做）**。
+
+**下一步**：P5 后半——备份导出/导入（四表 JSON + manifest、四条拒、MERGE/OVERWRITE、`allowBackup=false` 的说明句）与设置页第三节。
+
+---
+
 ## 2026-10-09 · P4 位置页（树 / 计数 / 菜单 / 删除门槛 / 位置照片）
 
 **交付**：

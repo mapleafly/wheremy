@@ -5,7 +5,10 @@ import com.wheremy.app.data.db.WheremyDatabase
 import com.wheremy.app.data.photos.PhotoStore
 import com.wheremy.app.data.repo.ItemRepository
 import com.wheremy.app.data.repo.LocationRepository
+import com.wheremy.app.data.settings.SettingsRepository
+import com.wheremy.app.data.settings.settingsDataStore
 import com.wheremy.app.domain.CaptureFlow
+import com.wheremy.app.domain.ReminderEngine
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -42,4 +45,13 @@ object DataModule {
     @Provides
     @Singleton
     fun captureFlow(items: ItemRepository): CaptureFlow = CaptureFlow(items)
+
+    @Provides
+    @Singleton
+    fun settingsRepository(@ApplicationContext context: Context): SettingsRepository =
+        SettingsRepository(context.settingsDataStore)
+
+    @Provides
+    @Singleton
+    fun reminderEngine(db: WheremyDatabase): ReminderEngine = ReminderEngine(db.itemDao())
 }

@@ -122,6 +122,38 @@ interface ItemDao {
     /** 标签筛选认的是 `item_tag` 里的行，**不是** `searchText` 里的字面；大小写不敏感。 */
     @Query("SELECT itemId FROM item_tag WHERE LOWER(tag) = LOWER(:tag)")
     suspend fun itemIdsWithTag(tag: String): List<String>
+
+    /**
+     * 到期取数窗口（`RULES.md` §11.2）。**下界不设**：过期很久但从没说过的也要进来。
+     *
+     * 三个分支各挡一种骚扰：
+     * - `expireNotifiedAt IS NULL`：进窗口后的第一次；
+     * - `expireNotifiedAt < windowStart AND expiresAt ∈ [windowStart, todayEnd)`："提前提醒过、今天就是到期日"再允许说一次；
+     * - 过期且已说过的**不再进来**（否则 `ORDER BY expiresAt` 会让它们长期占满 LIMIT 50）。
+     *
+     * ⚠️ 第二分支的三个条件缺一不可：旧的写法只要求"早于本次窗口起点"，会把"最多两次"变成"每天一次"。
+     */
+    @Query(
+        "SELECT * FROM item WHERE expiresAt IS NOT NULL AND expiresAt <= :windowEnd " +
+            "AND (expireNotifiedAt IS NULL " +
+            "OR (expireNotifiedAt < :windowStart AND expiresAt >= :windowStart AND expiresAt < :todayEnd)) " +
+            "ORDER BY expiresAt LIMIT 50",
+    )
+    suspend fun expiringBy(windowStart: Long, todayEnd: Long, windowEnd: Long): List<ItemEntity>
+
+    /**
+     * 只给设置页那个调试按钮：**放宽的是"今天说过几次"**（与 [expiringBy] 比，少的就是那条
+     * `expireNotifiedAt < windowStart`），但**不是把沉默的旧账翻回来**——过期很久且已说过的仍然不进来。
+     */
+    @Query(
+        "SELECT * FROM item WHERE expiresAt IS NOT NULL AND expiresAt <= :windowEnd " +
+            "AND (expiresAt >= :windowStart OR expireNotifiedAt IS NULL) " +
+            "ORDER BY expiresAt LIMIT 50",
+    )
+    suspend fun expiringIgnoringNotified(windowStart: Long, windowEnd: Long): List<ItemEntity>
+
+    @Query("UPDATE item SET expireNotifiedAt = :notifiedAt WHERE id IN (:ids)")
+    suspend fun markExpireNotified(ids: List<String>, notifiedAt: Long)
 }
 
 /** `otherOwnersOnPath` 的一行：某类主人还有几个（`ARCHITECTURE.md` §4.3）。 */
