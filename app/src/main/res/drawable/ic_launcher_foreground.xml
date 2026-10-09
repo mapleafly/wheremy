@@ -1,0 +1,27 @@
+<!--
+  自适应图标的前景（DESIGN_SYSTEM.md §267-268）。
+
+  形状：一只收纳箱（箱体 + 箱盖），对应这个应用在做的事——把家里的东西收进位置树。
+
+  🔒 **安全区**：画布 108×108，但只有正中间直径 66 的那个圆在任何蒙版下都保得住，
+  所以**每一个坐标到圆心 (54,54) 的距离必须 ≤ 33**。这条由 `LauncherIconTest` 钉着：
+  以后往边上扩东西会先在那里红，而不是在用户桌面上缺一角。
+  为了让那条测试能把每个数字都当坐标看，这里**只用 M / L / Z**，不出现圆弧参数。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 箱盖 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M28,44 L80,44 L80,50 L28,50 Z" />
+
+    <!-- 箱体 -->
+    <path
+        android:fillAlpha="0.85"
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M32,52 L76,52 L70,82 L38,82 Z" />
+</vector>

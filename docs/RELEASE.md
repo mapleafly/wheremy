@@ -26,19 +26,21 @@
 
 ## 2. 发布物与版本策略
 
-### 2.1 现在的事实
+### 2.1 现在的事实（**本实现**，2026-10-09 采）
 
 | 项 | 值 | 出处 |
 |---|---|---|
-| `applicationId` | `com.wheremy.app` | `app/build.gradle.kts:14` |
-| `versionName` / `versionCode` | `"0.1.0"` / `1` | `app/build.gradle.kts:18,17` |
-| `compileSdk` / `minSdk` / `targetSdk` | 36 / 26 / 36 | `app/build.gradle.kts:11,15,16` |
-| Java 与 `jvmTarget` | 都是 17 | `app/build.gradle.kts:25-26,42` |
-| release 变体 | 只有 `isMinifyEnabled = false`，**没有 `signingConfig`** | `app/build.gradle.kts:21-23` |
-| `allowBackup` | `"false"` 🔒 | `AndroidManifest.xml:13` |
-| 权限 | 只有 `INTERNET` / `POST_NOTIFICATIONS` / `CAMERA`，**没有任何存储权限** | `AndroidManifest.xml:3-6` |
-| DB schema 号 | `DB_SCHEMA_VERSION = 1`，`exportSchema = true`（基线 `app/schemas/…/1.json` 已进 git） | `WheremyDatabase.kt:16,21` |
-| 构建入口 | 命令行 gradle，**仓库里没有 wrapper** | `REBUILD.md` §8 第 1 条 |
+| `applicationId` | `com.wheremy.app`；**debug 带 `.dsh` 后缀**（与参照实现同机并存，`PLAN.md` §6.2） | `app/build.gradle.kts` |
+| `versionName` / `versionCode` | `"0.1.0"` / `1` | 同上 |
+| `compileSdk` / `minSdk` / `targetSdk` | 37 / 26 / 36（compileSdk 37 是 Compose BOM 2026.09.00 的硬要求） | 同上 |
+| 工具链 | **Gradle wrapper 9.8.1** + AGP 9.4.1（内建 Kotlin）+ Kotlin 2.4.20 + KSP 2.3.12 | `gradle/wrapper`、`gradle/libs.versions.toml` |
+| release 变体 | `isMinifyEnabled = true` + `isShrinkResources = true`，keep 规则在 `app/proguard-rules.pro`；**签名暂用调试签名**（⭐FR-RLS-01 未完成，见 §3.2） | `app/build.gradle.kts` |
+| R8 冒烟变体 | `.r8smoke`（规则同 release、包名多一个后缀）——**不能直装 release**：它的包名与参照实现那个应用同名 | 同上 |
+| `allowBackup` | `"false"` 🔒（在 release APK 的清单里核过） | `AndroidManifest.xml` |
+| 权限 | 自己声明：`POST_NOTIFICATIONS` + `CAMERA`；**没有任何存储权限**（选图走 SAF/Picker）。合并清单里另有 WorkManager 带进来的 `WAKE_LOCK` / `ACCESS_NETWORK_STATE` / `RECEIVE_BOOT_COMPLETED` / `FOREGROUND_SERVICE`。⚠️ **还没声明 `INTERNET`**——AI 那一节落地（P2）时再加，现在加了也没人用 | `aapt2 dump badging`（release APK） |
+| DB schema 号 | `DB_SCHEMA_VERSION = 1`，`exportSchema = true`；**没有 `fallbackToDestructiveMigration`**（⭐FR-DB-01 已按 §3.1 满足） | `WheremyDatabase.kt` |
+| 构建入口 | **仓库里有 wrapper**（`gradlew.bat` / `gradlew`）；命令行与 CI 都用它 | 仓库根 |
+| CI | GitHub Actions：`spotlessCheck` → `testDebugUnitTest` → `verifyRoborazziDebug` → `assembleRelease`（⚠️ 尚未在真实 GitHub 上跑过） | `.github/workflows/ci.yml` |
 | 分发方式 | 侧载 APK | `PRD.md` §5 ⭐FR-RLS-01 |
 
 **没有 release 签名 ⇒ 现在能侧载出去的只有 debug 包。** 这不是推断：`gradle :app:signingReport` 今天对 release 变体打印的是 `Config: null`、`Store: null`、`Alias: null`（本机实跑）。这也正是 ⭐FR-RLS-01 的全部内容（`PRD.md` §5，触发条件写着"侧载给别人用时"）。
@@ -78,46 +80,58 @@
 
 七条，每条三栏都要写出来：**为什么必须**（不说清就会被下一轮当可选项砍掉）、**怎么算做完**（可判定，不是感觉）、**谁签收**（一个角色名，不是"大家"）。
 
+> **本实现的逐条状态（2026-10-09）**：3.1 ✅ 已满足（比参照实现更早还清）｜3.2 ⬜ **未完成**（需要用户自己的 keystore）｜3.3 ✅ 走 B 路线（打开 R8）｜3.4 ✅ 已核（少一条 `INTERNET`，等 P2）｜3.5 ✅ 已核（含 APK 清单）｜3.6 ✅ 单测 17 例 + 真机一次"导出 → 删一件 → 覆盖导入 → 那一件回来"｜3.7 ⬜ 无上一版可演（首版），反面演练由测试覆盖。详细证据见 §10。
+
 ### 3.1 ⭐FR-DB-01：用真实 Room Migration 替换 `fallbackToDestructiveMigration(true)`
 
-**为什么必须**：`WheremyDatabase.kt:35` 挂着 `fallbackToDestructiveMigration(true)`，而 `DB_SCHEMA_VERSION` 恒为 1（`:16`）。Room 一旦发现库里的版本对不上又没有 Migration，就直接**清空四张表**——用户看不到任何提示，照片文件还在，行没了。现在改任何一个 `@Entity` 字段就是这个后果。解禁条件写在 `RULES.md` §15 W2；`WheremyDatabase.kt:32` 的注释本来也写着"发布前换成真实 Migration"。
-**怎么算做完**：① `DB_SCHEMA_VERSION` 升到 2；② 写 `Migration(1, 2)`，把本次字段变化逐条翻成 SQL；③ `Room.databaseBuilder(...)` 上加 `.addMigrations(...)` 并**删掉** `.fallbackToDestructiveMigration(true)`；④ `app/schemas/…/2.json` 导出来后与 `1.json` 逐列对照（`room.schemaLocation` 在 `app/build.gradle.kts:44`）；⑤ `androidx.room:room-testing` 已在测试依赖里（`app/build.gradle.kts:74`），写"从 1 升到 2 后老数据还在"的用例；⑥ 变异验牙：把 Migration 里的一条 `ALTER TABLE` 删掉，那条用例必须红。
+**为什么必须**：破坏性迁移会在版本对不上时**直接清空四张表**——用户看不到任何提示，照片文件还在，行没了。
+**怎么算做完**：① `DB_SCHEMA_VERSION` 升到 2；② 写 `Migration(1, 2)`，把本次字段变化逐条翻成 SQL；③ `Room.databaseBuilder(...)` 上加 `.addMigrations(...)`；④ `app/schemas/…/2.json` 导出来与 `1.json` 逐列对照；⑤ 写"从 1 升到 2 后老数据还在"的用例；⑥ 变异验牙：把 Migration 里的一条 `ALTER TABLE` 删掉，那条用例必须红。
+**本实现的情况**：**这一条已经提前还清**——`WheremyDatabase.build()` 里从来没有 `fallbackToDestructiveMigration`，所以版本一升、没交 Migration 就会**当场抛错**（大声失败，而不是静默清库）。`DELTA.md` 的 W2、`WheremyDatabase.kt` 的 KDoc 都记着这件事。①–⑥ 是"将来真升 schema 时"要走的流程。
 **谁签收**：架构师（Migration 写对）+ 测试（升级用例与变异）+ 软件经理（验收）。
 
 ### 3.2 ⭐FR-RLS-01：release 签名
 
-**为什么必须**：`app/build.gradle.kts:21-23` 里 `release` 只有 `isMinifyEnabled = false`，**没有 `signingConfig`**，所以现在出不了能侧载给别人的正式包——而"侧载给别人用"正是 ⭐FR-RLS-01 的触发条件（`PRD.md` §5）。
-**怎么算做完**：① 生成 keystore——PATH 上有 `keytool`（version-fox 那个 JDK），`keytool -genkeypair` 支持 `-keystore` / `-alias` / `-keyalg` / `-keysize` / `-validity`（本机 `keytool -genkeypair --help` 核过）；口令与别名**记在密码管理器里，不写进仓库、不写进任何文档**；② keystore 放在**仓库之外**——`.gitignore` 里的 `*.keystore` / `*.apk` / `local.properties` 只是"不会误提交"，不等于"放这儿安全"；③ 配 `signingConfigs` + `buildTypes.release.signingConfig`；④ 核一遍：`gradle :app:signingReport` 逐个变体打印 `Config` / `Store` / `Alias`——**今天 release 那一段是 `Config: null`**（实跑过），配好之后这里必须不再是 null；⑤ 出包后用 `apksigner.bat verify --print-certs <apk>` 核签名者与证书摘要（本机在 `D:\Lib\Android\Sdk\build-tools\36.1.0\apksigner.bat`，对现有 debug 包跑过）；⑥ `git status` 干净，里面没有 keystore。
+**为什么必须**：release 现在**用调试签名**（`signingConfig = signingConfigs.getByName("debug")`），只够做"R8 之后还跑得起来"的真机冒烟；侧载给别人用的正式包必须有自己的 keystore。
+**怎么算做完**：① 生成 keystore（口令与别名**记在密码管理器里，不写进仓库、不写进任何文档**）；② keystore 放在**仓库之外**；③ 配 `signingConfigs` + `buildTypes.release.signingConfig`（把现在那行调试签名换掉）；④ `gradle :app:signingReport` 里 release 那段不再是 `Config: null`；⑤ `apksigner verify --print-certs` 核签名者；⑥ `git status` 干净，KE 仓库里没有 keystore。
+**本实现的情况**：⬜ **未完成，且需要用户参与**——keystore 的口令与保管是用户的决定，代理不生成、不代管。首次正式交付前必须做掉这一条。
 **谁签收**：软件经理（只有他知道 keystore 在哪）+ 架构师（配置）。
 
-### 3.3 `isMinifyEnabled = false` 的处置
+### 3.3 `isMinifyEnabled` 的处置
 
-**为什么必须**：现在 release 不混淆（`app/build.gradle.kts:22`）。这本身不是缺陷，但**必须在发布记录里写明理由**；否则下一个人会以为这是忘了配，顺手打开，然后带着一套没验过的 keep 规则发出去。
-**怎么算做完**：二选一写进发布记录。**A 保持 `false`**——理由写成一句实话（侧载单机、包体不是约束），并注明"开混淆属于新引入的风险，不是一句配置"；**B 打开混淆**——`isMinifyEnabled = true` + 完整 keep 规则 + 全量回归（39 类 / 481 例）+ 真机冒烟（`REBUILD.md` §6 七条里至少走 1 / 3 / 4 / 7）。两条路都要求发布记录里有"release 是否混淆 + 理由"这一行。
+**为什么必须**：混淆开不开**必须在发布记录里写明理由**；否则下一个人会以为这是忘了配。
+**怎么算做完**：二选一写进发布记录（A 保持 `false` 并写理由；B 打开混淆 + 完整 keep 规则 + 全量回归 + 真机冒烟）。
+**本实现的选择**：**B（打开）**。理由与证据：
+- 规则三条：kotlinx.serialization 的 `$$serializer`、Room 3 的实体、Hilt 的 Worker（`app/proguard-rules.pro`）；
+- 全量回归 **27 类 / 175 例全绿**（R8 不影响 JVM 测试，但保证代码本身没依赖"名字还在"的怪写法）；
+- **真机冒烟**（唯一能验反射的步骤）：装 `.r8smoke` 包 → `--es dev backupcheck` → 「导出：位置 3 · 物品 5 · 照片 5 · 44331 字节」+「合并导入：0/0/0（按主键跳过）」→ 无崩溃；
+- 顺带收益：release APK **2.69 MB**（debug 17.4 MB），冷启动 **233 ms**（debug 926 ms）。
 **谁签收**：软件经理。
 
 ### 3.4 权限复核
 
-**为什么必须**：`PRD.md` FR-PRM-01 要求「权限清单最小」：只有 `INTERNET`（AI 请求）、`POST_NOTIFICATIONS`（到期提醒）、`CAMERA`（应用内取景），**没有任何存储权限**——选图走 SAF / Picker（FR-SRC-01）。多一条权限就推翻这条需求。
-**怎么算做完**：① 打开 `AndroidManifest.xml` 数 `<uses-permission>`：只许那三条；② 装机后在系统「应用信息 → 权限」里对照一遍；③ 核合并后的清单 `app/build/outputs/logs/manifest-merger-debug-report.txt`（本机现在就有这一份）。三处都只看这三条。
+**为什么必须**：`PRD.md` FR-PRM-01 要求「权限清单最小」，多一条就推翻这条需求。
+**怎么算做完**：① 数 `AndroidManifest.xml` 里的 `<uses-permission>`；② 装机后在系统「应用信息 → 权限」里对照；③ 核**合并后**的清单（`aapt2 dump badging <apk>`），把库带进来的也认一遍。
+**本实现的情况**：✅ 自己声明只有 `POST_NOTIFICATIONS` + `CAMERA`，**无存储权限**；合并清单里有 4 条来自 WorkManager 的传递依赖（`WAKE_LOCK` / `ACCESS_NETWORK_STATE` / `RECEIVE_BOOT_COMPLETED` / `FOREGROUND_SERVICE`），已在 §2.1 记明。⚠️ `INTERNET` 还没声明：AI 一节落地（P2）时加。
 **谁签收**：测试（真机那一遍）+ 软件经理（清单那一遍）。
 
 ### 3.5 `allowBackup="false"` 复核
 
-**为什么必须**：`REBUILD.md` §2 第 4 条——一动就把库和 key 交给系统云备份；而且设置页那句承重文案立刻变成假话：「应用已被系统设置为不做云备份（allowBackup=false），导出是你唯一的迁移手段。」（`SettingsScreen.kt:307-308` 🗣）。按 NFR-02（`RULES.md` §16），一句不成立的界面话就是缺陷。
-**怎么算做完**：① `AndroidManifest.xml:13` 仍是 `android:allowBackup="false"`，逐字核；② 装机后在真机上把设置页那句从头读一遍，确认与事实一致；③ 记进发布记录（本条不产生别的证据，但每年都会有人想改它）。
+**为什么必须**：一动就把库和 key 交给系统云备份；而且设置页那句承重文案立刻变成假话（NFR-02）。
+**怎么算做完**：① `AndroidManifest.xml` 仍是 `android:allowBackup="false"`；② 装机后把设置页那句读一遍；③ 记进发布记录。
+**本实现的情况**：✅ 源码与 **release APK 的清单**都核过（`aapt2 dump xmltree … | findstr allowBackup` → `false`）。
 **谁签收**：软件经理。
 
 ### 3.6 备份 / 导入回归（`RULES.md` §12 全部判据）
 
-**为什么必须**：导出 zip 是**唯一**的迁移手段（`SettingsScreen.kt:307-308`）；这条链坏掉，用户数据就没有出口。而 §12 整节都是 🔒。
-**怎么算做完**：按 `RULES.md` §12 四小节各走一遍并留证据。**§12.1 导出口径**——四张表在同一个事务里读、同一路径只写一次、读不到的图跳过；包内不含 key 与设置（`BackupRepository.kt:28` 的构造参数里刻意没有 `SettingsRepository`）。**§12.2 固定顺序**——读包 → 校验 → 一个事务落库 → 事务成功之后才动照片；覆盖导入那句承重文案（`SettingsScreen.kt:107` 🗣）**逐字没改**。**§12.3 四拒一放行**——四种坏包各造一个、合并与覆盖各试一次，确认库里一条没动；"包里有路径而 zip 里没这个文件"必须**放行**。**§12.4 MERGE / OVERWRITE**——合并保留本机已有；覆盖先清空再写，并按包内清单删掉本机多余的照片。证据 = 本轮 `BackupRepositoryTest`（18 例）的 XML + 真机上一次"导出 → 清空 → 覆盖导入 → 对账"的读数。
+**为什么必须**：导出 zip 是**唯一**的迁移手段；这条链坏掉，用户数据就没有出口。
+**怎么算做完**：按 §12 四小节各走一遍并留证据（导出口径 / 固定顺序 / 四拒一放行 / MERGE 与 OVERWRITE）。
+**本实现的情况**：✅ 自动化 **17 例**（`BackupRepositoryTest`）+ 真机一次完整闭环：「导出到文件」→ 删掉一件 →「覆盖导入」→ **那一件回来了**（结果句 `覆盖导入完成 · 位置 3 个 · 物品 5 件 · 照片 5 张`；库拉下来点数 3/5/5/5）。
 **谁签收**：测试（自动化那一半）+ 用户（真机那一半）。
 
 ### 3.7 迁移演练：旧包 → 导入 → 对账
 
-**为什么必须**：上面六条都是组件级的；只有真拿**上一发布版导出的包**灌进**本次要发的包**，才知道 §2.4 那条不可变项还成立。代码不会替你拦这一条——`validate` 只查引用完整性，不查"这份包是哪个版本导的"。
-**怎么算做完**：顺序固定不许跳。① 在装着**上一发布版**的机器上：设置页 →「导出到文件」→ 存到应用沙箱之外；② 记下回执那一行数字（`导出完成 · 位置 N 个 · 物品 N 件 · 照片 N 张 · X MB`，`SettingsViewModel.kt:271,279`），它是对账基准；③ 升级到本次要发的包（§6.3）；④ 设置页 →「合并导入」→ 选 ①那个包：主键都在，正确结果是**三个数不变**（数字涨了说明主键没对上）；⑤ 再走一次「覆盖导入」，对账三个数与 ② 一致；⑥ 抽查：照片墙上原图与缩略图都在、待归类里有草稿、位置树下钻正常、到期日还在。**反面演练（10 分钟）**：把包里 `manifest.json` 的 `schemaVersion` 手改成 `2`，导入必须被拒且本机数据一条不动——自动化版本就是 `BackupRepositoryTest.packageFromNewerSchemaLeavesDatabaseUntouched`。
+**为什么必须**：只有真拿**上一发布版导出的包**灌进**本次要发的包**，才知道 §2.4 那条不可变项还成立。
+**本实现的情况**：⬜ **首版没有"上一发布版"可演**；等 0.1.0 发出去、0.2.0 要发时补。反面演练（把包里 `schemaVersion` 改成比当前大）已经有了自动化版本：`BackupRepositoryTest.schema 更高直接拒` ✓。
 **谁签收**：发布负责人（①–⑤）+ 用户（⑥ 回"看到了什么"）。
 
 ---
@@ -185,31 +199,39 @@
 
 ## 6. 构建与分发
 
-### 6.1 命令行构建 fact
+### 6.1 命令行构建 fact（**本实现**）
 
 | 事实 | 值 | 出处 |
 |---|---|---|
-| 没有 wrapper | 仓库里没有 `gradlew`；用 PATH 上的 gradle 8.14.3（version-fox）。**加 CI 时另说**：官方写法要求提交 wrapper（`TECH_STACK.md` §8.2 更正三 / T10） | `REBUILD.md` §8 第 1 条、§7 A5 |
-| Java | `java` 是 Temurin 21.0.8，项目按 JVM 17 编译 | 同上 |
-| SDK | `ANDROID_HOME = D:\Lib\Android\Sdk`；`local.properties` 被 gitignore：**不提交，内容也不写进任何文档** | `REBUILD.md` §8 第 2 条 |
-| adb | **不在 PATH**，用 SDK 目录内的绝对路径（`…\platform-tools\adb.exe`）；本机**没有 `sdkmanager`**（SDK 里没有 `cmdline-tools`），别把装 SDK 组件写进脚本 | `REBUILD.md` §8 第 2 条 |
-| 平台 | Windows 11 + Git Bash；带设备路径的 adb 参数要 `MSYS_NO_PATHCONV=1` | `REBUILD.md` §8 第 4 条 |
+| wrapper | **仓库里有**（`gradlew.bat` / `gradlew`，Gradle 9.8.1）；本地与 CI 都用它，`./gradlew` 而不是 PATH 上的 gradle | `gradle/wrapper` |
+| 工具链 | AGP 9.4.1（内建 Kotlin）+ Kotlin 2.4.20 + KSP 2.3.12；项目按 JVM 17 编译 | `gradle/libs.versions.toml`、`app/build.gradle.kts` |
+| SDK | `ANDROID_HOME = D:\Lib\Android\Sdk`；`local.properties` 被 gitignore：**不提交，内容也不写进任何文档** | 本机 |
+| adb | **不在 PATH**，用 SDK 目录内的绝对路径（`…\platform-tools\adb.exe`） | 本机 |
+| 平台 | Windows 11 + PowerShell；带设备路径的 adb 参数注意引号 | 本机 |
 | 真机 | Xiaomi 13 / HyperOS，序列号 `9aa4b43e`；`adb devices` 为空时**不许用模拟器凑数** | `REBUILD.md` §8 第 5 条 |
+| 依赖源 | `settings.gradle.kts` 里显式写了阿里云镜像 + 官方源兜底；机器上那份 `init.d/init.gradle` 会注入镜像，所以开了 `RepositoriesMode.PREFER_SETTINGS` | `settings.gradle.kts`（F4） |
 
 ```bash
-gradle :app:assembleDebug          # 出 debug 包
-gradle :app:testDebugUnitTest      # 全量单测
+./gradlew.bat :app:assembleDebug              # 出 debug 包（17.4 MB）
+./gradlew.bat :app:testDebugUnitTest --rerun  # 全量单测（判绿要 --rerun 才保证 XML 是本轮的）
+./gradlew.bat :app:spotlessCheck              # 静态检查
+./gradlew.bat :app:verifyRoborazziDebug       # 截图回归（基线在 app/src/test/screenshots/）
+./gradlew.bat :app:assembleRelease            # release（R8 + 资源收缩，2.69 MB）
+./gradlew.bat :app:assembleR8smoke            # R8 真机冒烟变体（包名多 .r8smoke，可直装）
+./gradlew.bat :app:recordRoborazziDebug --rerun-tasks   # 更新截图基线（不加 --rerun-tasks 会静默不录，F34）
 ```
 
-**gradle 只许前台跑**：后台 shell 里没有 gradle，命令会以 exit 0 + 空输出结束，而 `test-results` 里躺着上一轮的 XML（`REBUILD.md` §7 A1）；脚本调 gradle 必须显式给项目根当 `cwd`（A2）。
+**gradle 只许前台跑**（`REBUILD.md` §7 A1）；脚本调 gradle 必须显式给项目根当 `cwd`（A2）。
 
 ### 6.2 debug 与 release 的差别
 
 | | debug | release（现在） |
 |---|---|---|
-| 混淆 | 无 | `isMinifyEnabled = false`，同样无 |
-| 签名 | 自动 debug 签名，能装 | **无 `signingConfig`，出不了能侧载的包**（⭐FR-RLS-01） |
-| 设置页 debug 区 | 有 | **没有**（`SettingsScreen.kt:69` 默认值取 `BuildConfig.DEBUG`，`WheremyRoot.kt:389` 走的就是默认值） |
+| 包名 | `com.wheremy.app.dsh`（与参照实现并存） | `com.wheremy.app` |
+| 混淆 | 无 | **R8 + 资源收缩**（keep 规则见 §3.3） |
+| 签名 | 自动 debug 签名 | **也暂时是 debug 签名**，只够冒烟；正式交付要换 keystore（⭐FR-RLS-01，§3.2） |
+| 设置页 debug 区 | 有 | **没有**（`BuildConfig.DEBUG`） |
+| 体积 / 冷启动 | 17.4 MB / 926 ms（中位数） | 2.69 MB / **233 ms**（中位数，`.r8smoke` 同规则） |
 | 可降级安装 | 可以 | 不可以（§5.3） |
 
 **由此得出一条发布期的实话**：`SettingsScreen.kt:172-174` 的「调试：立刻检查一次到期提醒」与 `:260-267` 的「AI 留痕：N 条…」**只在 debug 包上出现**（`UI.md` §7.1 第 5 项、§7.2 第 6 项）。所以正式包上**不能**按一下立刻验提醒链路（只能等那一天自己到），也**看不到** AI 留痕那一行（要看只能连 adb 取 `files/ai-trace`，`AppContainer.kt:72`）。这句要写进发布记录，免得下一个人以为正式包上有这两样。
@@ -363,6 +385,77 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 26. [ ] 归档：APK + 哈希 + keystore **位置**（只记位置，绝不记口令）。
 27. [ ] 发布后 24 小时观察项定下来：能不能打开、录一条、搜一次、导出一次、到期提醒那天有没有响（§8.4）。
 28. [ ] 24 小时内用户回的原话里出现异常 → 立刻开 `templates/defect-report.md`，按 §7.2 定级。
+
+---
+
+## 10. 本实现的签收记录 —— 0.1.0（2026-10-09，P6 收口）
+
+> 这一节是**本实现**（不是参照实现）的发布记录。逐条对 §9 的 28 项；没做的那几项写清为什么、什么时候做。
+> 判据一律是**机器产生的证据**，不是"跑过了"。
+
+### 10.1 发布物
+
+| 项 | 值 |
+|---|---|
+| release APK | `app-release.apk`，**2,691,833 字节**，SHA-256 `B13EB88EDE264F77DC178F29382F7553A9A29DE06C0DCC3A2D1D49C712CE848B`（R8 + 资源收缩） |
+| debug APK | `app-debug.apk`，17,380,427 字节，SHA-256 `4C1615E9C42C9B55ADEE04CCD8CA2315F9A38A798CAA87B410240F7707A293A0` |
+| 版本 | `versionCode 1` / `versionName 0.1.0`；`minSdk 26` / `targetSdk 36` / `compileSdk 37` |
+| 签名 | ⚠️ **调试签名**（⭐FR-RLS-01 未完成，§3.2）；能装能跑，不能作为正式交付 |
+| R8 冒烟包 | `.r8smoke`（规则同 release，包名 `com.wheremy.app.r8smoke`）——因为 release 的包名与参照实现那个应用同名，**直装会顶掉用户机上那个应用** |
+
+### 10.2 §9 清单逐条
+
+| # | 项 | 结果 | 证据 / 说明 |
+|---|---|---|---|
+| 1 | 改动逐条进 `CHANGELOG.md` | ✅ | 仓库根 `CHANGELOG.md` 六批（P0…P6b）各一节 |
+| 2 | 版本号 | ✅ | `1` / `0.1.0`（首个交付版，未发布过，不需要 +1） |
+| 3 | ⭐ 七项签收 | 🟡 | §3 逐条写了状态：3.1 ✅、3.2 ⬜（要用户的 keystore）、3.3–3.6 ✅、3.7 ⬜（首版无旧包） |
+| 4 | schema 变更流程 | ✅ 不适用 | 本次没动 schema；`DB_SCHEMA_VERSION = 1` 且**没有** `fallbackToDestructiveMigration` |
+| 5 | 权限复核 | ✅ | 自己声明 `POST_NOTIFICATIONS` + `CAMERA`，无存储权限；合并清单另有 WorkManager 四条（§2.1 已记）。⚠️ `INTERNET` 等 P2 |
+| 6 | `allowBackup="false"` | ✅ | 源码 + **release APK 清单**两处核过 |
+| 7 | 文档同步 | ✅ | `PLAN.md` §10 阶段表、`DELTA.md` §3、`CHANGELOG.md`、本轮 `RELEASE.md` 全部更新 |
+| 8 | 单测 `BUILD SUCCESSFUL` | ✅ | `./gradlew.bat :app:spotlessCheck :app:testDebugUnitTest :app:assembleDebug --rerun-tasks` → `BUILD SUCCESSFUL` |
+| 9 | XML 全fresh | ✅ | **27 份** XML 的 mtime 全部晚于本轮起跑时刻（`freshXml=27/27`） |
+| 10 | 自己数出用例数 | ✅ | **tests=175 failures=0 errors=0**（不认 exit code） |
+| 11–12 | 覆盖对账正/反向 | ✅ | 27 个测试类 / 175 例（正向：`PRD.md` §7 每行都有类守，见 `DELTA.md` §2 的矩阵） |
+| 13 | 变异验牙 | 🟡 | 本批做过 4 次有效验牙（期间真红过：备份往返 6 条、CameraGate 2 条、Gallery 3 条、确认页 4 条）；**没有**对每一处改动都做，如实记 |
+| 14 | debug APK 是本轮的 | ✅ | `app-debug.apk` mtime 2026-10-09 12:22 |
+| 15 | APK SHA-256 | ✅ | 见 §10.1 |
+| 16–17 | 环境快照 | ✅ | 装的是 `com.wheremy.app.dsh`（debug）与 `com.wheremy.app.r8smoke`；库里是我们自己的演示数据（5 件合成照片物品） |
+| 18 | **先导出** | ✅ | 「导出到文件」→ `wheremy-backup-2026-10-09.zip`，回执 `导出完成 · 位置 3 个 · 物品 5 件 · 照片 5 张 · 44 kB` |
+| 19 | `install -r` → 启动不崩 | ✅ | 每次安装后 `am start` + `logcat -b crash` 为空 |
+| 20 | 真机人工清单 | 🟡 | P0–P6 每阶段的真机项都逐条走了（截图在 `artifacts/screenshots/`）；`REBUILD.md` §6 那七条**尚未一次性签收**，留给 P6 最后一公里 |
+| 21–22 | 迁移 / 反面演练 | 🟡 | 无旧包可演（首版）；反面演练（schema 更高被拒）有自动化用例 ✓ |
+| 23 | 备份包自查 | ✅ | 包内条目只有 `manifest.json` / `data.json` / `photos/**`；构造参数里没有 `SettingsRepository`，key 物理上进不去 |
+| 24 | 回滚预案 | ✅ | 见 §7.1：APK 可装回旧版；**已经升级过 schema 的库退不回来**（本版没有 schema 变更，风险为零）；keystore 位置待定（§3.2） |
+| 25 | 签收 | 🟡 | §3 七项 + G0–G5 六门逐格有名字（见 10.3）；⭐3.2 与 G5 的人工清单待办 |
+| 26 | 归档 | 🟡 | 哈希已记（§10.1）；**keystore 位置待用户的决定** |
+| 27–28 | 发布后跟踪 | ⬜ | 本条要等真的装上用户日常使用才有意义 |
+
+### 10.3 门禁 G0–G5
+
+| 门 | 结果 | 证据 |
+|---|---|---|
+| **G0 构建** | ✅ | `assembleDebug` / `assembleRelease` / `assembleR8smoke` 均 `BUILD SUCCESSFUL`，三个 APK 的 mtime 都是本轮的 |
+| **G1 单测全绿双证** | ✅ | `BUILD SUCCESSFUL` + **27/27** XML fresh + 自数 `tests=175 failures=0 errors=0` |
+| **G2 变异验牙** | 🟡 | 见 §10.2 第 13 项：本批 4 次有效验牙，未覆盖每一处改动 |
+| **G3 覆盖对账** | ✅ | 27 类 / 175 例；`DELTA.md` §2 的 87 行矩阵把每条 FR 落到具体测试类 |
+| **G4 文档同步** | ✅ | 见 §10.2 第 7 项 |
+| **G5 真机人工清单** | 🟡 | 分阶段真机验证都做了（含相机 HAL、选图器、通知、备份闭环、横屏、R8 冒烟）；`REBUILD.md` §6 七条的一次性签收待补 |
+
+### 10.4 性能与体积（本轮实测，同一台机器）
+
+| 指标 | 本实现（R8 release） | 本实现（debug） | 参照实现（记录值） |
+|---|---|---|---|
+| 冷启动（`am start -W` TotalTime，4 次中位数） | **233 ms** | 926 ms | 980 ms |
+| APK 体积 | **2.69 MB** | 17.4 MB | 18.96 MB |
+
+⚠️ 比口径要诚实：参照那个 980 ms / 18.96 MB 是**同一个手机上的侧载包**，与我们的 release 包可比；与我们的 debug 包比则不公平（debug 不混淆、带着一堆调试设施）。
+
+### 10.5 结论
+
+**可以发布给用户自己用（侧载）**：功能闭环、备份出口、到期提醒、相机取证都真机走过一遍，测试与截图回归都有基线。
+**不可以当作"给别人用的正式包"**：⭐FR-RLS-01（自己的 keystore）没做，release 现在是调试签名——这一步需要用户的 keystore 与口令保管决定，代理由此停手并记录在 §3.2。
 
 ---
 
