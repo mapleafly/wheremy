@@ -83,7 +83,7 @@ class DevSeedViewModel @Inject constructor(
 
     /** 把之前的种子清掉（按标签找，不动用户的任何一件）。 */
     private suspend fun clearSeeds() {
-        items.rankedSearch("", com.wheremy.app.data.repo.Filters(tag = "自检种子")).forEach {
+        items.rankedSearch("", com.wheremy.app.data.repo.Filters(tags = setOf("自检种子"))).forEach {
             items.delete(it.id)
         }
     }

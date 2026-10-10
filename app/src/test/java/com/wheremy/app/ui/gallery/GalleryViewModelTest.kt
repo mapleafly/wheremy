@@ -259,7 +259,7 @@ class GalleryViewModelTest {
         assertFalse("什么都没设：该说'还没有物品'", plain.narrowing)
 
         assertTrue(GalleryUiState(query = "外套").narrowing)
-        assertTrue(GalleryUiState(filters = com.wheremy.app.data.repo.Filters(category = "衣物")).narrowing)
+        assertTrue(GalleryUiState(filters = com.wheremy.app.data.repo.Filters(categories = setOf("衣物"))).narrowing)
         assertTrue(GalleryUiState(filters = com.wheremy.app.data.repo.Filters(expireUntil = 1L)).narrowing)
         assertTrue(
             "非待归类页上的'只看待归类'算用户自己加的筛选",
@@ -275,8 +275,8 @@ class GalleryViewModelTest {
     fun `更多筛选那颗芯片点名开了哪些条件`() {
         val state = GalleryUiState(
             filters = com.wheremy.app.data.repo.Filters(
-                season = "夏",
-                tag = "冬装",
+                seasons = setOf("夏"),
+                tags = setOf("冬装"),
                 expireUntil = 1L,
             ),
         )
@@ -336,5 +336,25 @@ class GalleryViewModelTest {
         assertFalse(rows.any { it.item.id == placed })
         assertTrue("标题之外，收件箱谓词也要真的开", vm.state.value.filters.onlyInbox)
         assertTrue(vm.state.value.inboxMode)
+    }
+
+    @Test
+    fun `组合筛选：连点两个类别，两个都留着；再点一次只去掉那一个`() {
+        val vm = gallery()
+
+        vm.toggleCategory("衣物")
+        vm.toggleCategory("数码")
+        assertEquals("两个都选中", setOf("衣物", "数码"), vm.state.value.filters.categories)
+
+        vm.toggleCategory("衣物")
+        assertEquals("再点衣物只去掉衣物", setOf("数码"), vm.state.value.filters.categories)
+
+        vm.toggleSeason("冬")
+        vm.toggleSeason("秋")
+        vm.toggleTag("冬装")
+        vm.toggleTag("自检种子")
+        val f = vm.state.value.filters
+        assertEquals(setOf("冬", "秋"), f.seasons)
+        assertEquals(setOf("冬装", "自检种子"), f.tags)
     }
 }

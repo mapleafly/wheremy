@@ -31,14 +31,20 @@ data class ItemDraft(
 )
 
 /**
- * 照片墙的筛选条件（五个 AND 组合）。
+ * 照片墙的筛选条件：**同类内"或"、跨类"与"**（FR-FND-08）。
  * `expireUntil` 非空 = "只看到期日不晚于这个毫秒"，也就是**临近到期与已过期一起**；
  * 没有到期日的物品在它非空时一律不算进来。
  */
 data class Filters(
-    val category: String? = null,
-    val season: String? = null,
-    val tag: String? = null,
+    /**
+     * 组合筛选（`FR-FND-08`）：同一类里选多个是**或**，不同类之间是**与**。
+     *
+     * 例：`categories = {衣物, 电器}` + `seasons = {冬}` = 「衣物**或**电器」里那些**冬**天的。
+     * 空集合 = 这一类不筛。
+     */
+    val categories: Set<String> = emptySet(),
+    val seasons: Set<String> = emptySet(),
+    val tags: Set<String> = emptySet(),
     val onlyInbox: Boolean = false,
     val expireUntil: Long? = null,
     /**

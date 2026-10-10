@@ -226,7 +226,7 @@ private fun EmptyState(text: String, vm: GalleryViewModel) {
         verticalArrangement = Arrangement.spacedBy(WheremySpacing.md),
     ) {
         Text(text = text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("gallery_empty"))
-        val hasFilters = vm.state.value.let { it.query.isNotBlank() || it.filters.category != null }
+        val hasFilters = vm.state.value.let { it.query.isNotBlank() || it.filters.categories.isNotEmpty() }
         if (hasFilters) {
             TextButton(onClick = vm::clearFilters) { Text("清掉条件") }
         }
@@ -252,7 +252,7 @@ private fun FilterBar(state: GalleryUiState, expanded: Boolean, onToggleExpanded
         ) {
             state.categories.forEach { category ->
                 FilterChip(
-                    selected = state.filters.category == category,
+                    selected = category in state.filters.categories,
                     onClick = { vm.toggleCategory(category) },
                     label = { Text(category) },
                 )
@@ -286,7 +286,7 @@ private fun FilterBar(state: GalleryUiState, expanded: Boolean, onToggleExpanded
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
                     state.seasons.forEach { season ->
                         FilterChip(
-                            selected = state.filters.season == season,
+                            selected = season in state.filters.seasons,
                             onClick = { vm.toggleSeason(season) },
                             label = { Text(season) },
                         )
@@ -305,7 +305,7 @@ private fun FilterBar(state: GalleryUiState, expanded: Boolean, onToggleExpanded
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
                     state.tags.forEach { tag ->
                         FilterChip(
-                            selected = state.filters.tag == tag,
+                            selected = tag in state.filters.tags,
                             onClick = { vm.toggleTag(tag) },
                             label = { Text("#$tag") },
                         )

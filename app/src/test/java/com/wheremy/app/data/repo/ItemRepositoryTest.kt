@@ -191,7 +191,7 @@ class ItemRepositoryTest {
             ItemDraft(id = mentioned, name = "收纳袋", description = "装冬装用的，不是冬装"),
         )
 
-        val hits = repo.rankedSearch("", Filters(tag = "冬装"))
+        val hits = repo.rankedSearch("", Filters(tags = setOf("冬装")))
 
         assertEquals(listOf(tagged), hits.map { it.id })
     }

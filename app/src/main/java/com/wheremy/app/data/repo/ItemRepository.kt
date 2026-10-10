@@ -304,10 +304,12 @@ class ItemRepository(
         val q = query.trim().lowercase()
         val base = if (q.isEmpty()) itemDao.all() else itemDao.searchLike("%$q%")
         val capped = q.isNotEmpty() && base.size >= SEARCH_LIMIT
-        val tagOk = if (filters.tag.isNullOrBlank()) {
+        // 标签：多个标签是**或**——分别取"带这个标签的物品 id"，再并起来（FR-FND-08）
+        val wanted = filters.tags.filter { it.isNotBlank() }
+        val tagOk = if (wanted.isEmpty()) {
             base
         } else {
-            val ids = itemDao.itemIdsWithTag(filters.tag).toSet()
+            val ids = wanted.flatMap { tag -> itemDao.itemIdsWithTag(tag) }.toSet()
             base.filter { it.id in ids }
         }
         val filtered = tagOk.filter { matches(it, filters) }
@@ -509,8 +511,9 @@ class ItemRepository(
 
     /** 五个筛选项的 AND 组合。 */
     private fun matches(item: ItemEntity, filters: Filters): Boolean {
-        if (filters.category != null && item.category != filters.category) return false
-        if (filters.season != null && filters.season !in splitList(item.seasons)) return false
+        // 同一类里"或"、不同类之间"与"（FR-FND-08）
+        if (filters.categories.isNotEmpty() && item.category !in filters.categories) return false
+        if (filters.seasons.isNotEmpty() && splitList(item.seasons).none { it in filters.seasons }) return false
         if (filters.onlyInbox && !(item.locationId == null || item.status == ItemStatus.DRAFT)) return false
         if (filters.expireUntil != null) {
             val expiresAt = item.expiresAt ?: return false

@@ -50,9 +50,9 @@ data class GalleryUiState(
      */
     val narrowing: Boolean
         get() = query.isNotBlank() ||
-            filters.category != null ||
-            filters.season != null ||
-            filters.tag != null ||
+            filters.categories.isNotEmpty() ||
+            filters.seasons.isNotEmpty() ||
+            filters.tags.isNotEmpty() ||
             filters.expireUntil != null ||
             (!inboxMode && filters.onlyInbox)
 
@@ -61,8 +61,8 @@ data class GalleryUiState(
         get() {
             val picked = buildList {
                 if (filters.expireUntil != null) add("快到期/已过期")
-                filters.season?.let { add("季节：$it") }
-                filters.tag?.let { add("#$it") }
+                if (filters.seasons.isNotEmpty()) add("季节：" + filters.seasons.joinToString("、"))
+                if (filters.tags.isNotEmpty()) add(filters.tags.joinToString(" ") { "#$it" })
                 // 排序不是"筛选"，但它是展开面板里选出来的——折起来时也得看得见（FR-FND-09）
                 if (filters.sort != SortOrder.DEFAULT) add("排序：${filters.sort.label}")
             }
@@ -154,10 +154,9 @@ class GalleryViewModel @Inject constructor(
         refresh()
     }
 
+    /** 组合筛选（`FR-FND-08`）：再点一次取消这一类里的这一个；同类内是"或"、跨类是"与"。 */
     fun toggleCategory(category: String) {
-        _state.update {
-            it.copy(filters = it.filters.copy(category = if (it.filters.category == category) null else category))
-        }
+        _state.update { it.copy(filters = it.filters.copy(categories = it.filters.categories.toggled(category))) }
         refresh()
     }
 
@@ -172,16 +171,12 @@ class GalleryViewModel @Inject constructor(
     }
 
     fun toggleSeason(season: String) {
-        _state.update {
-            it.copy(filters = it.filters.copy(season = if (it.filters.season == season) null else season))
-        }
+        _state.update { it.copy(filters = it.filters.copy(seasons = it.filters.seasons.toggled(season))) }
         refresh()
     }
 
     fun toggleTag(tag: String) {
-        _state.update {
-            it.copy(filters = it.filters.copy(tag = if (it.filters.tag == tag) null else tag))
-        }
+        _state.update { it.copy(filters = it.filters.copy(tags = it.filters.tags.toggled(tag))) }
         refresh()
     }
 
@@ -263,3 +258,6 @@ class GalleryViewModel @Inject constructor(
         }
     }
 }
+
+/** 集合里"有就去掉、没有就加上"（FR-FND-08 的组合筛选芯片共用这一处）。 */
+private fun Set<String>.toggled(value: String): Set<String> = if (value in this) this - value else this + value
