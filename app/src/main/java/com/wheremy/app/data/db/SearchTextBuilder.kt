@@ -11,9 +11,10 @@ object SearchTextBuilder {
     /**
      * 参与拼接的字段集合的版本号。
      * 改了 [build] 的参数就加一：启动时拿它跟设置里存的值比，不等就补算一遍已有物品。
-     * 1 → 2 是因为加了颜色与材质。
+     * 1 → 2 是因为加了颜色与材质；2 → 3 是因为加了类别与季节（`FR-AI-11`：
+     * 模型可能回词表外的值，那类值也要能被搜到，不能只靠名字）。
      */
-    const val FIELD_VERSION = 2
+    const val FIELD_VERSION = 3
 
     /**
      * 拼接顺序**不是**参数表的顺序：标签插在 `aliases` 与 `description` 中间。
@@ -28,12 +29,17 @@ object SearchTextBuilder {
         description: String?,
         notes: String?,
         tags: List<String>,
+        /** 类别与季节（CSV 或单个值）：`FR-AI-11` 之后它们也参与全文搜索。 */
+        category: String? = null,
+        seasons: String? = null,
     ): String = listOfNotNull(
         name,
         brand,
         color,
         material,
         aliases,
+        category,
+        seasons,
         tags.joinToString(" ").ifBlank { null },
         description,
         notes,

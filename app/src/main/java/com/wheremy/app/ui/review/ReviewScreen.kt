@@ -185,17 +185,19 @@ fun ReviewScreen(
             )
 
             ChipRow("分类") {
-                wordLists.categories.forEach { category ->
-                    FilterChip(
-                        selected = cur.draft.category == category,
-                        onClick = { vm.setCategory(if (cur.draft.category == category) null else category) },
-                        label = { Text(category) },
-                    )
-                }
+                // 带上"当前这个值"：模型回了词表外的类别时，芯片行上也要看得出选的是哪个（FR-AI-11）
+                (wordLists.categories + listOfNotNull(cur.draft.category?.takeIf { it !in wordLists.categories }))
+                    .forEach { category ->
+                        FilterChip(
+                            selected = cur.draft.category == category,
+                            onClick = { vm.setCategory(if (cur.draft.category == category) null else category) },
+                            label = { Text(category) },
+                        )
+                    }
             }
 
             ChipRow("季节") {
-                wordLists.seasons.forEach { season ->
+                (wordLists.seasons + cur.draft.seasons.filter { it !in wordLists.seasons }).forEach { season ->
                     FilterChip(
                         selected = season in cur.draft.seasons,
                         onClick = { vm.toggleSeason(season) },

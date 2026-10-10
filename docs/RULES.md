@@ -338,7 +338,7 @@ val suggested = suggest.suggest(tree, first?.containerGuess)?.takeIf { draft.loc
 🔒 发出去的那份提示词和留痕里的那份必须是同一串字（`ApiPhotoAnalyzer.kt:35-37`）：
 在 `analyze` 里算一次、往下传。否则读留痕时核对的是"我们以为发了的"，不是"真发了的"。
 
-### 5.7 词表外的类别/季节：照单入库，但界面筛不到 🔒（重做时必须选一边）
+### 5.7 词表外的类别/季节：照单入库，且筛得到也搜得到 🔒（本实现选了②，2026-10-10）
 
 `AnalysisParser.kt:46-56` 对 `category`、`seasons` **不做白名单校验**，原样进 `AnalysisResult` →
 `applyAnalysis`（`ItemRepository.kt:114` 起）→ 库里的 `item.category` / `seasons` CSV。
@@ -355,7 +355,7 @@ val suggested = suggest.suggest(tree, first?.containerGuess)?.takeIf { draft.loc
 重做时二选一，**不许留着不选**（不选的话，`PRD.md` 的 FR-AI-01「照片 → 结构化字段预填」与成功判据 G3「不记得自己有什么时，能按类别/季节翻出来」就是两句互相拆台的话）：
 ① 解析侧就夹进词表（词表外的值丢弃，只在 `description` 里留线索）；② 保持入库、把筛选改成"也认自由值"
 （那要在季节/分类芯片云里带出库里实际出现过的值，代价是芯片云变高、要和 §10.3 一起改）。
-现在代码是第 ② 半（入库）+ 第 ① 半的界面（只给预设芯片），所以两边都不彻底。
+**本实现选了②并做完**（2026-10-10）：① `search_text` 纳入 `category` 与 `seasons`，字段版本 2 → 3（`SearchTextBuilder`）；② 照片墙芯片云 = 生效词表 ∪ **库里真出现过的值**（`GalleryViewModel.mergeFacets`，词表在前、自由值缀在后）；③ 确认页的分类/季节芯片行带上「当前这个值」，模型回了词表外的值也显示得出选中态。⚠️ 与 §10.3 一起改的，两处必须同进同退。
 
 
 ---

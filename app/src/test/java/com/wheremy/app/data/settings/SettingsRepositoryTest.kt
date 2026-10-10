@@ -127,7 +127,11 @@ class SettingsRepositoryTest {
         assertEquals("https://api.deepseek.com", settings.baseUrl)
         assertEquals(3, settings.reminderLeadDays)
         assertEquals("", settings.apiKey)
-        assertEquals("搜索字段版本默认跟上代码", SearchTextBuilder.FIELD_VERSION, settings.searchTextVersion)
+        assertEquals(
+            "缺省是 0（从没补算过）——取当前的 FIELD_VERSION 会让字段版本升了也不补算（F45）",
+            0,
+            settings.searchTextVersion,
+        )
         assertEquals("还没调用过 AI", 0, settings.aiCallCount)
         assertEquals(0L, settings.aiTokens)
         assertFalse("没 key 就不算能用", settings.hasUsableKey)
@@ -208,5 +212,23 @@ class SettingsRepositoryTest {
             repo().setApiKey("")
             assertNull(repo().currentConfig())
         }
+    }
+
+    @Test
+    fun `字段版本升了必须能触发补算：缺省值不能等于当前版本`() {
+        val settings = runBlocking { repo().current() }
+
+        assertTrue(
+            "缺省值必须与当前 FIELD_VERSION 不等，否则闸门永远为假、老库永远不补算（F45）",
+            settings.searchTextVersion != SearchTextBuilder.FIELD_VERSION,
+        )
+
+        // 补算过之后记住版本，下次启动就不再重算
+        runBlocking { repo().setSearchTextVersion(SearchTextBuilder.FIELD_VERSION) }
+        assertEquals(
+            "记过之后就相等了（不再重复补算）",
+            SearchTextBuilder.FIELD_VERSION,
+            runBlocking { repo().current() }.searchTextVersion,
+        )
     }
 }

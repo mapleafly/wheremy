@@ -104,6 +104,14 @@ class GalleryViewModel @Inject constructor(
      */
     private var refreshSeq = 0
 
+    /**
+     * 库里**真出现过**的类别与季节（`FR-AI-11`）。
+     *
+     * 缓存在这里而不是每次读库：词表变化（`settings.changes`）与列表刷新是两条独立的路径，
+     * 两边都要用同一份"数据里有什么"。
+     */
+    private var usedFacets: Pair<Set<String>, Set<String>> = emptySet<String>() to emptySet()
+
     init {
         refresh()
         // 筛选芯片读生效词表（FR-CFG-06）：改完词表回到照片墙就该看到新芯片
@@ -111,8 +119,10 @@ class GalleryViewModel @Inject constructor(
             settings.changes.collect { saved ->
                 _state.update {
                     it.copy(
-                        categories = saved.categories.ifEmpty { CATEGORIES },
-                        seasons = saved.seasons.ifEmpty { SEASONS },
+                        // 词表 ∪ 库里真出现过的值（`FR-AI-11`）：模型回了词表外的类别/季节时，
+                        // 那一件也得能筛出来——否则"记是记下了，只能靠名字找"
+                        categories = mergeFacets(saved.categories.ifEmpty { CATEGORIES }, usedFacets.first),
+                        seasons = mergeFacets(saved.seasons.ifEmpty { SEASONS }, usedFacets.second),
                     )
                 }
             }
@@ -129,8 +139,20 @@ class GalleryViewModel @Inject constructor(
                 summary.copy(thumbPath = summary.thumbPath?.let { items.photoStore.file(it).absolutePath })
             }
             val tags = items.allTags()
+            usedFacets = items.usedFacetValues()
+            val saved = settings.current()
             if (seq != refreshSeq) return@launch // 有更新的刷新在飞：这次的结果已经过期，丢掉
-            _state.update { it.copy(rows = rows, tags = tags, loading = false, capped = outcome.capped) }
+            _state.update {
+                it.copy(
+                    rows = rows,
+                    tags = tags,
+                    loading = false,
+                    capped = outcome.capped,
+                    // 词表 ∪ 库里真出现过的值：模型回了词表外的类别/季节时，那一件也得能筛出来
+                    categories = mergeFacets(saved.categories.ifEmpty { CATEGORIES }, usedFacets.first),
+                    seasons = mergeFacets(saved.seasons.ifEmpty { SEASONS }, usedFacets.second),
+                )
+            }
         }
     }
 
@@ -373,3 +395,12 @@ class GalleryViewModel @Inject constructor(
 
 /** 集合里"有就去掉、没有就加上"（FR-FND-08 的组合筛选芯片共用这一处）。 */
 private fun Set<String>.toggled(value: String): Set<String> = if (value in this) this - value else this + value
+
+/**
+ * 芯片云 = 生效词表（保持原有顺序）∪ 库里出现过的值（追加在末尾、按字典序）。
+ *
+ * 顺序有意为之：用户熟悉的预设排在前面，模型"发明"的那些缀在后面——
+ * 一眼能看出哪些是词表外的（`FR-AI-11`）。
+ */
+private fun mergeFacets(wordList: List<String>, used: Set<String>): List<String> =
+    wordList + used.filter { it !in wordList }.sorted()

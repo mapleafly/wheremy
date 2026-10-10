@@ -9,7 +9,6 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.wheremy.app.data.db.SearchTextBuilder
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -100,7 +99,11 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             model = prefs[KEY_MODEL] ?: DEFAULT_MODEL,
             apiKey = prefs[KEY_API_KEY].orEmpty(),
             reminderLeadDays = (prefs[KEY_LEAD_DAYS] ?: DEFAULT_LEAD_DAYS).coerceIn(LEAD_DAYS_MIN, LEAD_DAYS_MAX),
-            searchTextVersion = prefs[KEY_SEARCH_TEXT_VERSION] ?: SearchTextBuilder.FIELD_VERSION,
+            // 缺省 **0**（= 从没补算过），**不能**取当前的 FIELD_VERSION：
+            // 取当前值的话，键不存在时闸门永远相等（`x != x` 为假），
+            // 于是"加了搜索字段"这件事对老库**完全不生效**——2026-10-10 真机上就是这么漏掉类别与季节的。
+            // 缺省 0 的代价只是首次启动多跑一次 rebuildSearchText（它只写真的变了的行）。
+            searchTextVersion = prefs[KEY_SEARCH_TEXT_VERSION] ?: 0,
             aiCallCount = prefs[KEY_AI_CALLS] ?: 0,
             aiTokens = prefs[KEY_AI_TOKENS] ?: 0L,
             categories = splitList(prefs[KEY_CATEGORIES]),

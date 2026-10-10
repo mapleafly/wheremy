@@ -154,6 +154,8 @@ class ItemRepository(
                 description = merged.description,
                 notes = merged.notes,
                 tags = tags,
+                category = merged.category,
+                seasons = merged.seasons,
             ),
         )
         db.withWriteTransaction {
@@ -181,6 +183,22 @@ class ItemRepository(
             expireKind = item.expireKind,
             tags = itemDao.tagsFor(itemId),
         )
+    }
+
+    /**
+     * 库里**真出现过**的类别与季节（`FR-AI-11`）。
+     *
+     * 用来把筛选芯片云撑到"数据里有的都能筛"：模型回了词表外的值（例如「冬季」「数码产品」），
+     * 光有预设芯片的话那一件永远筛不出来。词表外的值由用户自己在确认页上决定留不留。
+     */
+    suspend fun usedFacetValues(): Pair<Set<String>, Set<String>> {
+        val categories = mutableSetOf<String>()
+        val seasons = mutableSetOf<String>()
+        itemDao.all().forEach { item ->
+            item.category?.trim()?.takeIf { it.isNotEmpty() }?.let { categories += it }
+            splitList(item.seasons).forEach { seasons += it }
+        }
+        return categories to seasons
     }
 
     /** 检索结果 + 一句实话：这次是不是被 `LIMIT 300` 截了（FR-FND-07）。 */
@@ -446,6 +464,8 @@ class ItemRepository(
                     description = item.description,
                     notes = item.notes,
                     tags = itemDao.tagsFor(item.id),
+                    category = item.category,
+                    seasons = item.seasons,
                 )
                 if (text != item.searchText) {
                     itemDao.upsert(item.copy(searchText = text))
@@ -561,6 +581,8 @@ class ItemRepository(
         description = draft.description.normalized(),
         notes = draft.notes.normalized(),
         tags = draft.tags.map { it.trim() }.filter { it.isNotEmpty() },
+        category = draft.category.normalized(),
+        seasons = csv(draft.seasons),
     )
 
     /** 五个筛选项的 AND 组合。 */
