@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-10-10 · CI 收口：修不存在的 action 版本 + 本地等价验证 + 首跑步骤交给人工
+
+**为什么这一轮不是"CI 真跑"**：本工作区**没有 git 远端**（`git remote -v` 为空），
+GitHub Actions 跑不了；建仓库与首次推送**必须由人做**（凭据在你手里）。所以这一轮做的是"把 CI 变成可信的"：
+
+- **修掉两个不存在的 action 大版本**：原写的 `actions/checkout@v7` 与 `actions/setup-java@v6` 都**不存在**
+  （核对到的最新分别是 **v6 / v5**，v5.3.0 已发布）。写错版本号会让第一次跑**直接红**。
+  `gradle/actions/setup-gradle` 保守取 **v4**、`upload-artifact` 保持 **v4**；
+- 补两条 GitHub 官方推荐：`concurrency`（同分支后推取消前一次）与最小 `permissions: contents: read`；
+- 加一步「打印环境」（`java -version` + `./gradlew --version`）——第一次真跑红了靠它定位；
+- **新增 `artifacts/tools/ci-local.ps1`**：与 `ci.yml` **同序同参**跑四道门，末尾给判决与测试合计。
+  `-Cold` = clean + 禁构建缓存 + 强制重跑，最接近 runner 的干净状态。
+  **实测**：`spotlessCheck` OK / `testDebugUnitTest` OK（96s）/ `verifyRoborazziDebug` OK（86s）/ 42 份 XML / 261 例 / 0 失败 ✓
+- `RELEASE.md` §9 加了第 10 条：**CI 首次真跑的三行命令**（建仓库 → `git remote add` → `push`），
+  跑通后把结论记回 `PLAN.md` §3.3；顺手修掉 §9 里过期的「39 份 XML」（现在是 42 份）。
+
+---
+
 ## 2026-10-10 · 词表外的类别/季节（`FR-AI-11`）+ 备份那条不对称（`FR-BAK-03`）+ 修 F45
 
 **`FR-AI-11` 按 `RULES.md` §5.7 选了方案②**（保持入库、筛选与搜索都认自由值）——不丢模型的答案：

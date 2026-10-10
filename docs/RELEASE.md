@@ -362,32 +362,42 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 **构建与判绿**
 
 8. [ ] 前台跑 `gradle :app:testDebugUnitTest`，拿到 `BUILD SUCCESSFUL`（§6.1）。
-9. [ ] 数 XML：`app/build/test-results/testDebugUnitTest/*.xml` **39 份**，mtime 全部晚于本轮起跑时刻（G1）。
-10. [ ] 自己数出 `tests=481 failures=0 errors=0`——**不认 exit code**（G1）。
-11. [ ] 覆盖对账正向：`PRD.md` §7 每行都能落到真实存在的测试类，`@Test` 数与表一致（G3）。
-12. [ ] 覆盖对账反向：39 个类 / 481 例（G3）。
-13. [ ] 变异验牙：本批每一处改动都做过"改坏它 → 期望那条红"；无牙的补或删（G2）。
-14. [ ] `gradle :app:assembleDebug`，确认 `app/build/outputs/apk/debug/app-debug.apk` 的 mtime 是本轮的（G0）。
-15. [ ] 记下 APK 的 SHA-256（§8.2）。
+9. [ ] 数 XML：`app/build/test-results/testDebugUnitTest/*.xml` **42 份**，mtime 全部晚于本轮起跑时刻（G1）。（也可直接 `pwsh -File artifacts/tools/ci-local.ps1 -Cold`：它会替你把四道门跑完并报测试合计。）
+10. [ ] **CI 首次真跑**（只在第一次或换了远端时做）：本工作区**没有 git 远端**，所以这一步必须由人做——
+    ```
+    # 1) 在 GitHub 上建一个空仓库（不要勾 README/.gitignore）
+    git remote add origin git@github.com:<你的账号>/<仓库名>.git
+    git push -u origin main
+    # 2) 去 Actions 页看这次 run：四道门（spotlessCheck → testDebugUnitTest →
+    #    verifyRoborazziDebug → assembleRelease）应当全绿；红了先看「打印环境」那一步
+    ```
+    跑通之后把结论记进 `PLAN.md` §3.3 的 CI 行（把「仍未跑过」划掉、写上日期与 run 链接）。
+    本地等价验证见 `PLAN.md` §3.3 的说明与 `artifacts/tools/ci-local.ps1`。
+11. [ ] 自己数出 `tests=261 failures=0 errors=0`——**不认 exit code**（G1）。（数字随批次增长，当前 42 类 / 261 例，2026-10-10；`pwsh -File artifacts/tools/ci-local.ps1 -Cold` 会替你跑完四道门并报合计。）
+12. [ ] 覆盖对账正向：`PRD.md` §7 每行都能落到真实存在的测试类，`@Test` 数与表一致（G3）。
+13. [ ] 覆盖对账反向：**42 个类 / 261 例**（G3；数字随批次增长）。
+14. [ ] 变异验牙：本批每一处改动都做过"改坏它 → 期望那条红"；无牙的补或删（G2）。
+15. [ ] `gradle :app:assembleDebug`，确认 `app/build/outputs/apk/debug/app-debug.apk` 的 mtime 是本轮的（G0）。
+16. [ ] 记下 APK 的 SHA-256（§8.2）。
 
 **装机与人工**
 
-16. [ ] 环境快照第 1 行：装的哪个包、装于何时（§6.4）。
-17. [ ] 环境快照第 2 行：本机数据是否为空、`POST_NOTIFICATIONS` 是否还没授过（§6.4）。
-18. [ ] **先导出**：设置页 → 备份 →「导出到文件」，记下回执那三个数（§7.3）。
-19. [ ] `install -r` → `am force-stop` → `am start`，点开不崩（§6.3）。
-20. [ ] 真机人工清单七条逐条签收（`REBUILD.md` §6）；交给用户的那份用 `templates/device-acceptance.md`，**不许出现内部编号**。
-21. [ ] 迁移演练：旧版本的包 →「合并导入」对账 →「覆盖导入」对账（§3.7）。
-22. [ ] 反面演练：把包的 `schemaVersion` 改成 `2`，导入被拒且本机数据一条没动（§5.2）。
-23. [ ] 备份包自查：包里没有 key、没有任何设置项（只看条目名，**别把包内容贴进任何文档**）。
+17. [ ] 环境快照第 1 行：装的哪个包、装于何时（§6.4）。
+18. [ ] 环境快照第 2 行：本机数据是否为空、`POST_NOTIFICATIONS` 是否还没授过（§6.4）。
+19. [ ] **先导出**：设置页 → 备份 →「导出到文件」，记下回执那三个数（§7.3）。
+20. [ ] `install -r` → `am force-stop` → `am start`，点开不崩（§6.3）。
+21. [ ] 真机人工清单七条逐条签收（`REBUILD.md` §6）；交给用户的那份用 `templates/device-acceptance.md`，**不许出现内部编号**。
+22. [ ] 迁移演练：旧版本的包 →「合并导入」对账 →「覆盖导入」对账（§3.7）。
+23. [ ] 反面演练：把包的 `schemaVersion` 改成 `2`，导入被拒且本机数据一条没动（§5.2）。
+24. [ ] 备份包自查：包里没有 key、没有任何设置项（只看条目名，**别把包内容贴进任何文档**）。
 
 **发布与跟踪**
 
-24. [ ] 回滚预案写下来：装回哪个包、要不要先导出、谁知道 keystore 在哪（§7.1）。
-25. [ ] 签收：§3 七项 + G0–G5 六门，每格有名字（§4）。
-26. [ ] 归档：APK + 哈希 + keystore **位置**（只记位置，绝不记口令）。
-27. [ ] 发布后 24 小时观察项定下来：能不能打开、录一条、搜一次、导出一次、到期提醒那天有没有响（§8.4）。
-28. [ ] 24 小时内用户回的原话里出现异常 → 立刻开 `templates/defect-report.md`，按 §7.2 定级。
+25. [ ] 回滚预案写下来：装回哪个包、要不要先导出、谁知道 keystore 在哪（§7.1）。
+26. [ ] 签收：§3 七项 + G0–G5 六门，每格有名字（§4）。
+27. [ ] 归档：APK + 哈希 + keystore **位置**（只记位置，绝不记口令）。
+28. [ ] 发布后 24 小时观察项定下来：能不能打开、录一条、搜一次、导出一次、到期提醒那天有没有响（§8.4）。
+29. [ ] 24 小时内用户回的原话里出现异常 → 立刻开 `templates/defect-report.md`，按 §7.2 定级。
 
 ---
 

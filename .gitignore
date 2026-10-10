@@ -20,7 +20,11 @@ release/
 .DS_Store
 
 # 本工作区的产物（截图、导出、dump 等，一律不进 git）
-artifacts/
+# ⚠️ 例外：artifacts/tools/ 里的**脚本**入库——文档（RELEASE §9 / PLAN §3.3）点名引用它们，
+# 推到远端后别人也要能跑（ci-local.ps1 / ui.ps1 / pull-db.ps1 等）。
+# 截图、拉下来的库、备份包（artifacts/db、artifacts/screenshots、artifacts/backup）照旧忽略，隐私不进 git。
+artifacts/*
+!artifacts/tools/
 
 # 参照实现的只读副本（只在本地构建参照 APK 用，绝不提交、绝不回写原目录）
 .reference/

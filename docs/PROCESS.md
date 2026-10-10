@@ -262,7 +262,7 @@ NFR-02："界面上每一句话都必须真的成立"（判据 `RULES.md` §16�
 | **G0 构建** | `gradle :app:assembleDebug` 成功 | 命令行输出 `BUILD SUCCESSFUL` | 修到通过；**不许**在测试前用"构建应该没问题"跳门 |
 | **G1 单测全绿（双证）** | ① `gradle :app:testDebugUnitTest` `BUILD SUCCESSFUL`；② 本轮 XML 的 mtime **晚于**本轮起跑时刻，且自数 `tests/failures/errors` | 一个 XML 计数（39 份、481 例、failures=0 errors=0）+ 一条"XML 比本轮新"的检查 | 见 `TESTING.md` §6；陈旧 XML、后台无 gradle、`GradleWorkerMain` 文件锁三种伪绿/伪红都要按 `REBUILD.md` §1.1 处理 |
 | **G2 变异验牙** | 把改动的那一行**故意改坏**，期望恰好对应的测试变红 | 变异清单：改了哪一行 / 期望哪条红 / 实际哪条红；"无牙"的条目要补测试 | 补测试或删断言；`REBUILD.md` §1.3 里两条真无牙就是这么暴露的 |
-| **G3 覆盖对账** | 正向：`PRD.md` §7 每行都有具名测试类且例数一致；反向：`@Test` 类数 = 39、总数 = 481（数字随批次增长，对账口径见 `TESTING.md` §5） | 两次 grep 的输出 | 缺口补测试；`PRD.md` §7 表随实现更新 |
+| **G3 覆盖对账** | 正向：`PRD.md` §7 每行都有具名测试类且例数一致；反向：`@Test` 类数 = 42、总数 = 261（数字随批次增长，对账口径见 `TESTING.md` §5） | 两次 grep 的输出 | 缺口补测试；`PRD.md` §7 表随实现更新 |
 | **G4 文档同步** | §5 矩阵逐行勾掉；没有文档说了、代码没做的事；没有代码做了、文档没写的事 | 勾过的矩阵 + 本次提交的文档 diff | 补齐；**不许**用"下次一起补" |
 | **G5 真机人工清单** | `REBUILD.md` §6 那七条由**人**在真机上回"看到了什么" | 签收单（`templates/device-acceptance.md`） | 未签收不许对外交付 |
 

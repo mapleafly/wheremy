@@ -184,7 +184,7 @@
 | CI | 无 | GitHub Actions：`spotlessCheck` + `testDebugUnitTest`（⏳ 文件已写，**未在真 GitHub 跑过**） | `.github/workflows/ci.yml` |
 | 静态检查 | 无 | Spotless 8.10.3（内含 ktlint 1.4.0）✅ 已落地；**不引 detekt** | `:app:spotlessCheck` 通过；Compose 函数命名用 `editorConfigOverride` 放行（发现 F3） |
 | 截图回归 | 无 | Roborazzi 1.76.0 ✅ 已落地（当前 2 张：浅/深色画廊基线） | `app/build/outputs/roborazzi/design-gallery-{light,dark}.png`；`recordRoborazziDebug` / `verifyRoborazziDebug` |
-| 测试分层 | JVM + Robolectric 39 类 / 481 例 | 分层相同；当前 4 类 / 6 例（P0 基线），**例数目标不少于 481** | `BuildSmokeTest`、`DatabaseSmokeTest`、`DesignGalleryTest`、`DesignGalleryScreenshotTest` |
+| 测试分层 | JVM + Robolectric 39 类 / 481 例 | 分层相同；**P0 基线 4 类 / 6 例 → 现在 42 类 / 261 例**（2026-10-10） | `BuildSmokeTest`、`DatabaseSmokeTest`、`DesignGalleryTest`、`DesignGalleryScreenshotTest` |
 | 编译目标 | compileSdk 36 / targetSdk 36 | **compileSdk 37** / targetSdk 36 ✅（Compose 1.12.1 的硬要求，发现 F1） | `app/build.gradle.kts` |
 | 数据 | Room 2.8.5（`androidx.room`） | **Room 3.0.3（`androidx.room3`）** ✅ 四表/三 DAO 已落地 | `DatabaseSmokeTest` 等 8 类 32 例；**导出的 schema 与参照逐字段一致**（F11）。⚠️ 3.x 把 `@TypeConverter/@TypeConverters` 改名为 `@ColumnTypeConverter/@ColumnTypeConverters`（F10） |
 | 照片管线 | `PhotoStore` + `PhotoReclaim`（1600/256/1024 三档） | 同档位同常量 ✅ 已落地 + 公开了三档常量供测试断言 | `PhotoStoreTest` 6 例；真机自检 `EXIF 800×400 → 400×800` ✅ |

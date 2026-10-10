@@ -61,7 +61,7 @@ $ADB -s <serial> install -r app/build/outputs/apk/debug/app-debug.apk
 # 4) 跑全量单测（必须前台跑；后台 shell 没有 gradle，见 REBUILD.md §7 A1）
 gradle :app:testDebugUnitTest
 
-# 5) 判绿：不看 exit code，看"新鲜的 39 份 XML + 自己数出来的 tests/failures/errors"
+# 5) 判绿：不看 exit code，看「新鲜的 XML 份数（当前 42 份）+ 自己数出来的 tests/failures/errors」
 find app/build/test-results/testDebugUnitTest -name '*.xml' -newermt '<本轮起跑时间>' | wc -l
 grep -ho 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' \
   app/build/test-results/testDebugUnitTest/*.xml \
@@ -73,7 +73,7 @@ grep -ho 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' \
 | 2 | `BUILD SUCCESSFUL` + APK 文件存在 | 依赖能不能下（阿里云镜像，§5.1） |
 | 3 | `Success` | 设备没授权 / 被系统拦包（`REBUILD.md` §7 D4） |
 | 4 | 命令真的跑完了（有输出、耗时是分钟级） | 后台跑了？`cwd` 给了吗（`REBUILD.md` §1.1、§7 A1/A2） |
-| 5 | **39 份新鲜 XML** 且 `failures=0 errors=0` | 陈旧 XML 是"假绿"的头号来源（`REBUILD.md` §1.1） |
+| 5 | **本轮份数的新鲜 XML**（当前 42 份）且 `failures=0 errors=0` | 陈旧 XML 是「假绿」的头号来源（`REBUILD.md` §1.1） |
 
 **判绿是"双证"**：`BUILD SUCCESSFUL` **且** 本轮 XML 是新的——完整判据与跑法见 `TESTING.md` §6 判绿双证。拿上一轮的绿 XML 当结论，按 `REBUILD.md` §1.1 算 **NO-VERDICT**，不算绿。
 
@@ -243,7 +243,7 @@ $ADB -s <serial> shell am start -n com.wheremy.app/.MainActivity
 
 一次改动提交之前，逐条勾：
 
-- [ ] **测试全绿，且是这一轮的绿**：39 份 XML 新鲜 + `failures=0 errors=0`（§2.2），不是"昨天跑过"。
+- [ ] **测试全绿，且是这一轮的绿**：本轮份数（当前 42 份）的 XML 新鲜 + `failures=0 errors=0`（§2.2），不是「昨天跑过」。
 - [ ] **变异验牙做过了**：把改到的那一行故意改坏，期望的那条**恰好**变红；没有红就是假绿，补断言或删断言（`REBUILD.md` §1.3）。
 - [ ] **涉及文案时连测试一起改了**：界面测试按逐字串找节点，改文案不改断言 = 留下一颗定时炸弹；走 `REBUILD.md` §5 的五步门。
 - [ ] **涉及规则时先改 `RULES.md`**：谓词、阈值、状态机、逐字文案的权威在 `RULES.md`，文档先行再改代码（`PROCESS.md` §3.2）。

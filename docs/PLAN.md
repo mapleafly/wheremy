@@ -103,7 +103,7 @@
 | 图片 / 网络 / 序列化 | Coil 3.6.3 / OkHttp 5.5.0 + `mockwebserver3` / kotlinx.serialization 1.11.0 / coroutines 1.11.0 | — | OkHttp 5 的测试包名变了，import 要写对 |
 | 质量 | Spotless 8.10.3 + ktlint 插件 14.2.0 + AGP Lint | — | **不引 detekt**（2.x 仍 alpha，官方样板也不用） |
 | 测试 | JUnit 4.13.2 / Robolectric 4.17 / androidx.test:core 1.7.0 / coroutines-test 1.11.0 / Roborazzi 1.76.0 | — | JVM 为主；截图回归从 Phase 0 就接 |
-| CI | GitHub Actions：`checkout@v7` + `setup-java@v6` + `gradle/actions/setup-gradle@v6` | — | 第一天就要绿：`spotlessCheck` + `testDebugUnitTest`（`.github/workflows/ci.yml`，**尚未在真 GitHub 上跑过**） |
+| CI | GitHub Actions：`checkout@v6` + `setup-java@v5` + `gradle/actions/setup-gradle@v4` + `upload-artifact@v4` | — | 四道门：`spotlessCheck` → `testDebugUnitTest` → `verifyRoborazziDebug` → `assembleRelease`（`.github/workflows/ci.yml`）。**2026-10-10 修正**：原写的 `checkout@v7`/`setup-java@v6` 这两个大版本**不存在**（核对到的最新是 v6/v5），写错版本号会让第一次跑直接红；同时补了 `concurrency` 与最小 `permissions`。**内容已本地等价跑通**（`artifacts/tools/ci-local.ps1 -Cold`：clean + 禁缓存 + 强制重跑，四步全绿）；**真 GitHub 上仍未跑过**——本工作区没有 git 远端，建仓库与首次推送必须由人做（命令见 `RELEASE.md` §9 第 10 条） |
 | SDK | compileSdk **37**、targetSdk **36**、minSdk **26**、JVM target **17** | — | **实测修正**：Compose 1.12.1 的 AAR 元数据要求 compileSdk ≥ 37（详见 §3.3 实测结果 F1）；targetSdk 保持 36；`java.time` 在 26 上原生可用，**不要加 desugaring** |
 | 应用 id | `com.wheremy.app` + debug 变体后缀 **`.dsh`** | — | 让"参照包"与"本实现包"能在同一台真机并存、同屏对比（§6.2） |
 
@@ -122,6 +122,10 @@ D:\src\dsh\wheremy\
 ├── settings.gradle.kts / gradlew / gradlew.bat / .gitignore
 └── （没有根目录 CHANGELOG.md：唯一一份在 docs/CHANGELOG.md，见 RELEASE.md §8.1）
 ```
+
+> **CI 怎么在本地验**（没有远端也能知道会不会红）：
+> `pwsh -File artifacts/tools/ci-local.ps1 -Cold` —— 与 `ci.yml` 同序同参跑四道门，`-Cold` 会 clean + 禁构建缓存 + 强制重跑（最接近 runner 的干净状态），末尾给判决与测试合计。
+> 2026-10-10 实测：`spotlessCheck` OK / `testDebugUnitTest` OK（96s）/ `verifyRoborazziDebug` OK（86s）/ 42 份 XML / 261 例 / 0 失败。
 
 ### 3.3 Phase 0 的工具链验证门（spike，半天）
 
