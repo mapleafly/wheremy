@@ -43,6 +43,23 @@ object UiFormat {
     }
 
     /**
+     * 批量删除的文案（`FR-OPR-06`）。
+     *
+     * 单件那句（[deleteWarningOf]）说的是"这一件"；批量必须把**两类照片分开数**：
+     * 会跟着没的、还有别的记录在用所以会留着的——含糊说"照片可能被删"等于没说。
+     *
+     * 数口径：`photosToDelete` 是**文件张数**（一条文件没别人用才算它会没），
+     * `photosKept` 是**记录件数**（同一条文件可能被两件共用），所以后者说"件"不说"张"。
+     */
+    fun deleteWarningOfBatch(count: Int, photosToDelete: Int, photosKept: Int): String = when {
+        photosToDelete == 0 && photosKept == 0 -> "这 $count 条记录会被删除，无法恢复。"
+        photosToDelete > 0 && photosKept > 0 ->
+            "删除这 $count 件：$photosToDelete 张照片会跟着没；另有 $photosKept 件的照片还有别的记录在用，照片留着。"
+        photosKept > 0 -> "删除这 $count 件：记录会没，照片留着（还有别的记录在用）。"
+        else -> "删除这 $count 件：照片和记录会一起删除，无法恢复。"
+    }
+
+    /**
      * AI 失败的 11 条文案（`RULES.md` §13.2）——**逐字**，`null` 不显示。
      *
      * 三条写法纪律（别顺手改）：
@@ -85,3 +102,6 @@ enum class LocationGuessOutcome { FILLED, KEPT_USER_CHOICE, NO_MATCH }
  * 弹框期间列表可能刷新（照片墙尤其如此），只存 id 的话就没人知道该说哪句实话。
  */
 data class PendingDelete(val itemId: String, val warning: String)
+
+/** 批量删除的待确认状态（`FR-OPR-06`）：要删哪些 + 那句已经算好的话。 */
+data class BatchDelete(val itemIds: List<String>, val warning: String)

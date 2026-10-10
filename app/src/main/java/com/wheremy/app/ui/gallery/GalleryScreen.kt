@@ -1,7 +1,9 @@
 package com.wheremy.app.ui.gallery
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,8 +21,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -29,8 +33,12 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -91,7 +99,10 @@ fun GalleryScreen(
     // 否则会拿旧名字配新数据
     val menuItem = state.rows.firstOrNull { it.item.id == state.menuFor }
 
+    val snackbar = remember { SnackbarHostState() }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text(if (inboxMode) "待归类" else "照片墙") },
@@ -164,13 +175,98 @@ fun GalleryScreen(
                         GalleryCell(
                             summary = summary,
                             horizontal = compactHeight,
+                            selectionMode = state.selectedIds.isNotEmpty(),
+                            selected = summary.item.id in state.selectedIds,
                             onOpen = { onOpenItem(summary.item.id) },
+                            onToggle = { vm.toggleSelection(summary.item.id) },
+                            onLongPress = { vm.startSelection(summary.item.id) },
                             onMenu = { vm.openMenu(summary.item.id) },
                         )
                     }
                 }
             }
+
+            // —— 多选工具条（`FR-OPR-06`）：贴底，选中数量 + 三件事 + 取消 ——
+            if (state.selectedIds.isNotEmpty()) {
+                Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        // 尾部给 FAB 留位：真机上「取消」被右下角那颗 + 盖住过（F43）
+                        modifier = Modifier.padding(
+                            start = WheremySpacing.lg,
+                            end = 88.dp,
+                            top = WheremySpacing.sm,
+                            bottom = WheremySpacing.sm,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs),
+                    ) {
+                        Text("已选 ${state.selectedIds.size} 件", style = MaterialTheme.typography.titleSmall)
+                        // FlowRow 而不是 Row：四颗按钮在窄屏上放不下，Row 会把「取消」挤出屏幕
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm),
+                            verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs),
+                        ) {
+                            OutlinedButton(onClick = vm::askMoveSelection) { Text("搬到…") }
+                            OutlinedButton(onClick = vm::askCategorySelection) { Text("改类别") }
+                            OutlinedButton(onClick = vm::askDeleteSelection) { Text("删除") }
+                            TextButton(onClick = vm::clearSelection) { Text("取消") }
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    // 结果一句话（搬了几件/删了几件）：说清数量，不然用户不知道刚才那一下做了什么
+    LaunchedEffect(state.notice) {
+        state.notice?.let {
+            snackbar.showSnackbar(it)
+            vm.consumeNotice()
+        }
+    }
+
+    // 批量搬到（FR-OPR-06）：与单件那条路同一份位置清单
+    if (state.moveSelectionOpen) {
+        AlertDialog(
+            onDismissRequest = vm::cancelMoveSelection,
+            title = { Text("把 ${state.selectedIds.size} 件搬到") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    TextButton(onClick = { vm.confirmMoveSelection(null) }) { Text("暂不归类，先进「待归类」") }
+                    state.locationOptions.forEach { option ->
+                        TextButton(onClick = { vm.confirmMoveSelection(option.id) }) { Text(option.label) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = vm::cancelMoveSelection) { Text("取消") } },
+        )
+    }
+
+    // 批量改类别（FR-OPR-06）：清单读生效词表，和确认页那颗芯片同源
+    if (state.categorySelectionOpen) {
+        AlertDialog(
+            onDismissRequest = vm::cancelCategorySelection,
+            title = { Text("把 ${state.selectedIds.size} 件的类别改成") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    state.categories.forEach { category ->
+                        TextButton(onClick = { vm.confirmCategorySelection(category) }) { Text(category) }
+                    }
+                    TextButton(onClick = { vm.confirmCategorySelection(null) }) { Text("清空类别") }
+                }
+            },
+            confirmButton = { TextButton(onClick = vm::cancelCategorySelection) { Text("取消") } },
+        )
+    }
+
+    // 批量删除确认（FR-OPR-06）：那句话在 VM 里按"两类照片分开数"算好，这里只显示
+    state.pendingBatchDelete?.let { pending ->
+        AlertDialog(
+            onDismissRequest = vm::cancelDeleteSelection,
+            title = { Text("删除这 ${pending.itemIds.size} 件？") },
+            text = { Text(pending.warning) },
+            confirmButton = { TextButton(onClick = vm::confirmDeleteSelection) { Text("删除") } },
+            dismissButton = { TextButton(onClick = vm::cancelDeleteSelection) { Text("取消") } },
+        )
     }
 
     if (menuItem != null) {
@@ -323,13 +419,35 @@ private fun FilterBar(state: GalleryUiState, expanded: Boolean, onToggleExpanded
  * 文字行根本看不见（F21）；横排把缩略图放左边、三行字放右边，同样高度里信息齐得多。
  */
 @Composable
-private fun GalleryCell(summary: ItemSummary, horizontal: Boolean = false, onOpen: () -> Unit, onMenu: () -> Unit) {
+private fun GalleryCell(
+    summary: ItemSummary,
+    horizontal: Boolean = false,
+    /** 多选态（`FR-OPR-06`）：在选的时候点卡片 = 选中/取消，而不是进详情页。 */
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    onOpen: () -> Unit,
+    onToggle: () -> Unit = {},
+    onLongPress: () -> Unit = {},
+    onMenu: () -> Unit,
+) {
     val thumb: @Composable (Modifier) -> Unit = { modifier ->
         Box(
             modifier = modifier
                 .clip(MaterialTheme.shapes.medium)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .clickable(onClick = onOpen),
+                // 长按 = 进入多选并选上这一张（Android 的通用手势，不用额外的"选择"按钮）
+                .combinedClickable(
+                    onClick = { if (selectionMode) onToggle() else onOpen() },
+                    onLongClick = onLongPress,
+                )
+                // 选中的视觉：外框 + 右上角勾，两个都给——只给颜色的话色弱用户看不出来
+                .then(
+                    if (selected) {
+                        Modifier.border(3.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.medium)
+                    } else {
+                        Modifier
+                    },
+                ),
         ) {
             if (summary.thumbPath != null) {
                 AsyncImage(
@@ -345,6 +463,17 @@ private fun GalleryCell(summary: ItemSummary, horizontal: Boolean = false, onOpe
                     text = summary.item.name.take(8).ifBlank { "未命名" },
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.align(Alignment.Center),
+                )
+            }
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = "已选中",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(WheremySpacing.xs)
+                        .background(MaterialTheme.colorScheme.surface, CircleShape),
                 )
             }
         }

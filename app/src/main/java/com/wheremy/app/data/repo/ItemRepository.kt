@@ -199,6 +199,47 @@ class ItemRepository(
         return rows.size
     }
 
+    // —— 批量操作（`FR-OPR-06`）——
+    //
+    // 三件事都**逐件复用单件那条路**，不另写一套 SQL：
+    // 单件的口径（`lastMovedAt` 与 `updatedAt` 同一个时间戳、"手工搬动即视为确认"、删文件按引用计数）
+    // 已经在测试里钉死了，批量再写一遍就等于把那些规则抄两遍——迟早抄歪。
+
+    /**
+     * 批量搬到同一个位置。返回真的搬了几件（**本来就在那儿的不算**，免得说"搬了 5 件"其实没动）。
+     */
+    suspend fun moveAll(itemIds: Collection<String>, locationId: String?): Int {
+        val targets = itemIds.filter { id -> itemDao.byId(id)?.locationId != locationId }
+        if (targets.isEmpty()) return 0
+        targets.forEach { move(it, locationId) }
+        return targets.size
+    }
+
+    /** 批量改类别。类别不进 `searchText`（那是名称/品牌/颜色/材质/别名/描述/备注），所以不用重算。 */
+    suspend fun setCategoryAll(itemIds: Collection<String>, category: String?): Int {
+        var changed = 0
+        db.withWriteTransaction {
+            itemIds.forEach { id ->
+                val item = itemDao.byId(id) ?: return@forEach
+                if (item.category == category) return@forEach
+                itemDao.upsert(item.copy(category = category, updatedAt = now()))
+                changed++
+            }
+        }
+        return changed
+    }
+
+    /** 批量删除。逐件走 [delete]（它自己开事务、自己按引用计数删文件），顺序与单件一致。 */
+    suspend fun deleteAll(itemIds: Collection<String>): Int {
+        var deleted = 0
+        itemIds.forEach { id ->
+            if (itemDao.byId(id) == null) return@forEach
+            delete(id)
+            deleted++
+        }
+        return deleted
+    }
+
     /** 确认入库：名称必须非空；顺手算 `lastMovedAt` 与 `searchText`，并整批替换标签。 */
     suspend fun confirm(draft: ItemDraft) {
         val name = draft.name.trim()
