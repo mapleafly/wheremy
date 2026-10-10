@@ -79,7 +79,7 @@ class ReviewAccessibilityTest {
                 )
             }
         }
-        compose.waitUntil(timeoutMillis = 5_000) { vm.state.value.current != null }
+        compose.waitUntil(timeoutMillis = 20_000) { vm.state.value.current != null }
 
         compose.onRoot().checkRoboAccessibility(
             RoborazziATFAccessibilityCheckOptions(

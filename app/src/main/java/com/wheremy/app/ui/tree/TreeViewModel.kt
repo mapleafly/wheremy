@@ -46,6 +46,12 @@ data class TreeUiState(
     val editId: String? = null,
     val pendingDeleteId: String? = null,
     val pendingDeleteName: String? = null,
+    /** 这个位置里还剩什么（`FR-LOC-05`）：弹窗据此决定给不给"搬走"的快捷入口。 */
+    val pendingDeleteChildCount: Int = 0,
+    val pendingDeleteItemCount: Int = 0,
+    /** 正在给"搬走"选目标：从哪个节点搬、搬什么。 */
+    val moveOutFrom: String? = null,
+    val moveOutKind: MoveOutKind? = null,
     val notice: String? = null,
 ) {
     val isRoot: Boolean get() = currentParentId == null
@@ -190,28 +196,128 @@ class TreeViewModel @Inject constructor(
         val name = _state.value.rows.firstOrNull { it.node.id == id }?.node?.name
             ?: _state.value.breadcrumb.lastOrNull()
             ?: return
-        _state.update { it.copy(menuFor = null, pendingDeleteId = id, pendingDeleteName = name) }
+        // 弹窗**立刻**立起来（id/名字同步写），"还剩什么"随后补上——
+        // 反过来的话，用户（或测试）可能在数字到位之前就按了删除，那一下会静默失效
+        _state.update {
+            it.copy(
+                menuFor = null,
+                pendingDeleteId = id,
+                pendingDeleteName = name,
+                pendingDeleteChildCount = 0,
+                pendingDeleteItemCount = 0,
+            )
+        }
+        viewModelScope.launch {
+            // 数清楚"里面还剩什么"（`FR-LOC-05`）：弹窗据此给"搬走"的快捷入口，
+            // 而不是等用户按了删除再告诉他"不行"
+            val all = locations.all()
+            val tree = buildLocationTree(all)
+            val children = tree.childrenOf(id).size
+            val itemsHere = items.atLocation(id).size
+            if (_state.value.pendingDeleteId != id) return@launch // 期间用户已经取消了
+            _state.update { it.copy(pendingDeleteChildCount = children, pendingDeleteItemCount = itemsHere) }
+        }
     }
 
-    fun cancelDelete() = _state.update { it.copy(pendingDeleteId = null, pendingDeleteName = null) }
+    fun cancelDelete() = _state.update {
+        it.copy(
+            pendingDeleteId = null,
+            pendingDeleteName = null,
+            pendingDeleteChildCount = 0,
+            pendingDeleteItemCount = 0,
+        )
+    }
 
     fun confirmDelete() {
         val id = _state.value.pendingDeleteId ?: return
         viewModelScope.launch {
             runCatching { locations.delete(id) }
                 .onSuccess {
-                    _state.update { it.copy(pendingDeleteId = null, pendingDeleteName = null) }
+                    _state.update {
+                        it.copy(
+                            pendingDeleteId = null,
+                            pendingDeleteName = null,
+                            pendingDeleteChildCount = 0,
+                            pendingDeleteItemCount = 0,
+                        )
+                    }
                     refresh()
                 }
                 .onFailure { t ->
-                    // 门槛在数据层；这里是"刚好被人搬进东西"的兜底，说清还剩什么
-                    val message = when (t) {
-                        is LocationNotEmptyException ->
-                            "里面还有 ${t.childCount} 个子位置、${t.itemCount} 件物品，先搬走再删。"
-                        else -> t.message ?: "删除失败"
+                    // 门槛在数据层；这里是"刚好被人搬进东西"的兜底——**弹窗不关**，
+                    // 把最新数字写回去，让"搬走"那两颗按钮就在眼前（FR-LOC-05）
+                    if (t is LocationNotEmptyException) {
+                        _state.update {
+                            it.copy(
+                                pendingDeleteChildCount = t.childCount,
+                                pendingDeleteItemCount = t.itemCount,
+                                notice = "里面还有 ${t.childCount} 个子位置、${t.itemCount} 件物品，先搬走再删。",
+                            )
+                        }
+                    } else {
+                        _state.update {
+                            it.copy(
+                                pendingDeleteId = null,
+                                pendingDeleteName = null,
+                                pendingDeleteChildCount = 0,
+                                pendingDeleteItemCount = 0,
+                                notice = t.message ?: "删除失败",
+                            )
+                        }
                     }
-                    _state.update { it.copy(pendingDeleteId = null, pendingDeleteName = null, notice = message) }
                 }
+        }
+    }
+
+    // —— 删除前的"搬走"（FR-LOC-05）——
+
+    /** 给"把里面的物品/子位置搬走"选目标。 */
+    fun startMoveOut(kind: MoveOutKind) {
+        val id = _state.value.pendingDeleteId ?: return
+        viewModelScope.launch {
+            val all = locations.all()
+            val tree = buildLocationTree(all)
+            // 物品可以搬到任何别的位置（包括根层级）；子位置不能搬进自己或自己的子树
+            val excluded = if (kind == MoveOutKind.CHILDREN) tree.descendantIds(id) else setOf(id)
+            val options = all
+                .filter { it.id !in excluded }
+                .map { MoveOption(it.id, tree.breadcrumb(it.id)) }
+                .sortedBy { it.label }
+            _state.update { it.copy(moveOutFrom = id, moveOutKind = kind, moveOptions = options) }
+        }
+    }
+
+    fun cancelMoveOut() = _state.update { it.copy(moveOutFrom = null, moveOutKind = null) }
+
+    /**
+     * 搬完**立刻重试删除**：搬走这一步的目的就是删掉这个位置，
+     * 让用户再点一次"删除"是多余的；还剩东西（比如只搬了物品、子位置还在）就用最新数字说明。
+     */
+    fun pickMoveOutTarget(targetId: String?) {
+        val id = _state.value.moveOutFrom ?: return
+        val kind = _state.value.moveOutKind ?: return
+        viewModelScope.launch {
+            val result = runCatching {
+                when (kind) {
+                    MoveOutKind.ITEMS -> items.moveAllFrom(id, targetId)
+                    MoveOutKind.CHILDREN -> {
+                        val all = locations.all()
+                        val tree = buildLocationTree(all)
+                        val children = tree.childrenOf(id)
+                        children.forEach { child -> locations.changeParent(child.id, targetId) }
+                        children.size
+                    }
+                }
+            }
+            _state.update { it.copy(moveOutFrom = null, moveOutKind = null, moveOptions = emptyList()) }
+            result
+                .onSuccess { moved ->
+                    val what = if (kind == MoveOutKind.ITEMS) "$moved 件物品" else "$moved 个子位置"
+                    _state.update { it.copy(notice = "已把 $what 搬走。") }
+                    refresh()
+                    confirmDelete()
+                }
+                .onFailure { t -> _state.update { it.copy(notice = t.message ?: "搬走失败") } }
         }
     }
 
@@ -264,3 +370,6 @@ class TreeViewModel @Inject constructor(
 
     fun consumeNotice() = _state.update { it.copy(notice = null) }
 }
+
+/** 删除前"搬走"这一步搬什么（`FR-LOC-05`）：这个位置里直接放着的物品，还是它的子位置。 */
+enum class MoveOutKind { ITEMS, CHILDREN }

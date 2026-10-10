@@ -198,13 +198,53 @@ fun TreeScreen(
     }
 
     state.pendingDeleteId?.let { id ->
+        val blocked = state.pendingDeleteChildCount > 0 || state.pendingDeleteItemCount > 0
         AlertDialog(
             onDismissRequest = vm::cancelDelete,
             title = { Text("删除「${state.pendingDeleteName}」？") },
-            // 门槛在数据层，这句话只是提前说清规则
-            text = { Text("只有空位置可以删除：子位置和物品需要先搬走。") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs)) {
+                    Text(
+                        // 门槛在数据层，这句话把规则与**现状**一起说清
+                        if (blocked) {
+                            "这个位置里还有 ${state.pendingDeleteItemCount} 件物品、" +
+                                "${state.pendingDeleteChildCount} 个子位置，不能直接删。"
+                        } else {
+                            "只有空位置可以删除：子位置和物品需要先搬走。"
+                        },
+                    )
+                    // FR-LOC-05：把"搬走"这一步**就地**给出来——不用退出去一件件搬
+                    if (state.pendingDeleteItemCount > 0) {
+                        TextButton(onClick = { vm.startMoveOut(MoveOutKind.ITEMS) }) {
+                            Text("把 ${state.pendingDeleteItemCount} 件物品搬到…")
+                        }
+                    }
+                    if (state.pendingDeleteChildCount > 0) {
+                        TextButton(onClick = { vm.startMoveOut(MoveOutKind.CHILDREN) }) {
+                            Text("把 ${state.pendingDeleteChildCount} 个子位置移到…")
+                        }
+                    }
+                }
+            },
             confirmButton = { TextButton(onClick = vm::confirmDelete) { Text("删除") } },
             dismissButton = { TextButton(onClick = vm::cancelDelete) { Text("取消") } },
+        )
+    }
+
+    // 搬走的目标选择（FR-LOC-05）：搬完会自动重试删除，所以这里不需要"确定"
+    state.moveOutFrom?.let {
+        AlertDialog(
+            onDismissRequest = vm::cancelMoveOut,
+            title = { Text(if (state.moveOutKind == MoveOutKind.CHILDREN) "把子位置移到" else "把物品搬到") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    TextButton(onClick = { vm.pickMoveOutTarget(null) }) { Text("移到根层级") }
+                    state.moveOptions.forEach { option ->
+                        TextButton(onClick = { vm.pickMoveOutTarget(option.id) }) { Text(option.label) }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = vm::cancelMoveOut) { Text("取消") } },
         )
     }
 

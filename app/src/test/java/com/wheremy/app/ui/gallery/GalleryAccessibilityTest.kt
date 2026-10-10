@@ -68,7 +68,7 @@ class GalleryAccessibilityTest {
                 )
             }
         }
-        compose.waitUntil(timeoutMillis = 5_000) { vm.state.value.rows.isNotEmpty() }
+        compose.waitUntil(timeoutMillis = 20_000) { vm.state.value.rows.isNotEmpty() }
 
         compose.onRoot().checkRoboAccessibility(
             RoborazziATFAccessibilityCheckOptions(

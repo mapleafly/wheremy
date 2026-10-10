@@ -173,6 +173,32 @@ class ItemRepository(
     /** 检索结果 + 一句实话：这次是不是被 `LIMIT 300` 截了（FR-FND-07）。 */
     data class SearchOutcome(val rows: List<ItemEntity>, val capped: Boolean)
 
+    /**
+     * 把一个位置里**直接放着**的物品整批搬到别处（`FR-LOC-05`：删位置时的"搬走"快捷入口）。
+     *
+     * 三条口径与单件 [move] 保持一致：`locationId` 换掉、`lastMovedAt` 与 `updatedAt` 用**同一个**时间戳
+     * （"手工搬动即视为确认"那条规则靠它）、一个事务里做完。
+     *
+     * @return 搬走的件数（0 表示这个位置本来就没直接放东西）。
+     */
+    suspend fun moveAllFrom(locationId: String, targetLocationId: String?): Int {
+        val rows = itemDao.atLocation(locationId)
+        if (rows.isEmpty()) return 0
+        val timestamp = now()
+        db.withWriteTransaction {
+            rows.forEach { row ->
+                itemDao.upsert(
+                    row.copy(
+                        locationId = targetLocationId,
+                        lastMovedAt = timestamp,
+                        updatedAt = timestamp,
+                    ),
+                )
+            }
+        }
+        return rows.size
+    }
+
     /** 确认入库：名称必须非空；顺手算 `lastMovedAt` 与 `searchText`，并整批替换标签。 */
     suspend fun confirm(draft: ItemDraft) {
         val name = draft.name.trim()
