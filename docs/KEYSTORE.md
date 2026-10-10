@@ -201,6 +201,17 @@ release 的 `applicationId` 是 `com.wheremy.app`，而你手机上那个参照�
 ⚠️ 上面这条不是理论：本工作区为此专门有一个 `.r8smoke` 变体（规则同 release、只多一个包名后缀），
 就是用来做"R8 之后还跑得起来"的真机冒烟的——**别拿 release 直装**。
 
+### 坑 3：第一次 `install` 失败之后**别急着再按一次**
+
+第一次失败会是 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`（同包名、不同签名）。**如果第二次同样一条命令成功了**，那说明中间有人（或 MIUI 的安装对话框）把旧包**卸载**了——而卸载会**清掉旧包的全部数据**。
+
+所以看到第一次失败时，先决定走哪条路，再动手：
+
+- **要并存** → 给 release 加 `applicationIdSuffix`（例如 `.mine`）重新出包，两个应用各过各的；
+- **要替换** → **先**在旧包里「设置 → 备份 → 导出到文件」，把 zip 存到 `Download` 之外（例如电脑上），再卸载旧包、装新包、用「覆盖导入」把数据灌回来。
+
+⚠️ 本条是 2026-10-10 的真实教训：`com.wheremy.app` 被替换之后，旧应用的数据不在手机上了，好在 `/sdcard/Download` 里还留着之前导出的 zip，数据是可恢复的——**导出这一步是唯一的退路**。
+
 ### 坑 2：`versionCode` 只能涨，不能降
 
 同一把密钥下，`versionCode` 更小的包**装不上去**（`INSTALL_FAILED_VERSION_DOWNGRADE`）。

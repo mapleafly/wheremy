@@ -43,6 +43,15 @@ class ItemRepositoryTest {
     private lateinit var repo: ItemRepository
     private lateinit var locations: LocationRepository
 
+    /**
+     * **可控时钟**：每次读推进 1 毫秒。
+     *
+     * 为什么不用真实时间：`confirm` 的 `lastMovedAt` 断言比的是"两次操作的时间戳"，
+     * 而两次操作完全可能落在**同一毫秒**里——机器一忙就随机红（2026-10-10 实测到过一次：
+     * 并发跑构建时 `换位置必须刷新` 失败）。时间相关的断言必须喂假时钟，不能靠运气。
+     */
+    private var clock = 1_000L
+
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -50,7 +59,8 @@ class ItemRepositoryTest {
             .allowMainThreadQueries()
             .build()
         store = PhotoStore(File(tmp.root, "photos"))
-        repo = ItemRepository(db, store)
+        clock = 1_000L
+        repo = ItemRepository(db, store, now = { clock++ })
         locations = LocationRepository(db, store)
     }
 

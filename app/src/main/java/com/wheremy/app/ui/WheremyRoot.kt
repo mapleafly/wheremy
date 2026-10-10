@@ -51,6 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
+import com.wheremy.app.BuildConfig
 import com.wheremy.app.reminder.ReminderNotifier
 import com.wheremy.app.ui.camera.CameraGate
 import com.wheremy.app.ui.camera.CameraPreview
@@ -113,6 +114,28 @@ data object BackupSmokeKey : NavKey
 data object WordListSmokeKey : NavKey
 
 /**
+ * `--es dev <名字>` → 起始路由（**F38**）。
+ *
+ * 🔒 **只在 debug 包里认这个名字**：release 里 `debugBuild = false`，于是任何 `--es dev …`
+ * 都被当成"没有这个 extra"，直接进照片墙。理由：开发期脚手架（演示数据、自检、两份冒烟）
+ * 不该出现在交付出去的包里——它们能写库、能改设置，留着就是给将来的自己挖坑。
+ *
+ * 抽成**纯函数**是为了能测：单测跑在 debug 变体上，`BuildConfig.DEBUG` 永远是 true，
+ * 只有把"是不是 debug 包"当参数传进来，才测得到 release 那一支。
+ */
+internal fun devRouteFor(dev: String?, debugBuild: Boolean = BuildConfig.DEBUG): NavKey? {
+    if (!debugBuild) return null
+    return when (dev) {
+        "selfcheck" -> DataSelfCheckKey
+        "design" -> DesignGalleryKey
+        "seed" -> DevSeedKey
+        "backupcheck" -> BackupSmokeKey
+        "words" -> WordListSmokeKey
+        else -> null
+    }
+}
+
+/**
  * 照片的两个来源（`UI.md` §2.5）。`NONE` 表示没有在等照片。
  */
 private enum class PhotoTarget { NONE, ITEM, LOCATION }
@@ -132,14 +155,7 @@ fun WheremyRoot(
     treeVm: TreeViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val start: NavKey = when (devRoute) {
-        "selfcheck" -> DataSelfCheckKey
-        "design" -> DesignGalleryKey
-        "seed" -> DevSeedKey
-        "backupcheck" -> BackupSmokeKey
-        "words" -> WordListSmokeKey
-        else -> GalleryKey
-    }
+    val start: NavKey = devRouteFor(devRoute) ?: GalleryKey
     val backStack = remember { mutableStateListOf(start) }
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -358,20 +374,25 @@ fun WheremyRoot(
                             onOpenDevSeed = { backStack.add(DevSeedKey) },
                         )
                     }
-                    entry<DesignGalleryKey> {
-                        DesignGalleryScreen(onBack = { backStack.removeLastOrNull() })
-                    }
-                    entry<DataSelfCheckKey> {
-                        DataSelfCheckScreen(onBack = { backStack.removeLastOrNull() })
-                    }
-                    entry<BackupSmokeKey> {
-                        BackupSmokeScreen(onBack = { backStack.removeLastOrNull() })
-                    }
-                    entry<WordListSmokeKey> {
-                        WordListSmokeScreen(onBack = { backStack.removeLastOrNull() })
-                    }
-                    entry<DevSeedKey> {
-                        DevSeedScreen(onDone = { switchTo(GalleryKey) })
+                    // —— 开发期脚手架（**F38**）：只在 debug 包里注册 ——
+                    // release 里这些屏连同它们的入口一起被 R8 裁掉：它们能写库、能改设置，
+                    // 不该出现在交付出去的包里。
+                    if (BuildConfig.DEBUG) {
+                        entry<DesignGalleryKey> {
+                            DesignGalleryScreen(onBack = { backStack.removeLastOrNull() })
+                        }
+                        entry<DataSelfCheckKey> {
+                            DataSelfCheckScreen(onBack = { backStack.removeLastOrNull() })
+                        }
+                        entry<BackupSmokeKey> {
+                            BackupSmokeScreen(onBack = { backStack.removeLastOrNull() })
+                        }
+                        entry<WordListSmokeKey> {
+                            WordListSmokeScreen(onBack = { backStack.removeLastOrNull() })
+                        }
+                        entry<DevSeedKey> {
+                            DevSeedScreen(onDone = { switchTo(GalleryKey) })
+                        }
                     }
                 },
             )

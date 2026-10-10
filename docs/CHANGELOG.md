@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-10-10 · 用户签了名：日志核过 + 修掉 F38（开发期入口在 release 里可达）+ 一条 flake
+
+**用户的日志（逐段判定）**：
+
+| 段 | 判定 | 依据 |
+|---|---|---|
+| `keytool -genkeypair` | ✅ 正常 | 「生成 4,096 位 RSA 密钥对和自签名证书 (SHA384withRSA)（有效期 10,000 天）」+「正在存储 D:\keys\wheremy-release.jks」 |
+| `signingReport` | ✅ 正常 | `Variant: release` → `Config: release`、`Store: D:\keys\wheremy-release.jks`、`Alias: wheremy-release`、`SHA-256: 81:18:B9:…`、`Valid until: 2054年2月25日`（= 生成日 + 10,000 天 ✓）；debug/r8smoke/debugAndroidTest 仍是调试签名（设计如此） |
+| `assembleRelease` | ✅ 正常 | `validateSigningRelease` 通过、`BUILD SUCCESSFUL`；`Deprecated Gradle features` 那句来自插件，不是错误 |
+| `apksigner verify` | ✅ 正常 | DN = 用户填的 `CN=Wheremy,…`；`SHA-256: 8118b97d…` 与 `signingReport` 的 `81:18:B9:…` **是同一个摘要**（一个带冒号大写、一个不带冒号小写） |
+| 第一次 `install` 失败 | ✅ 预期 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE`：手机上那个 `com.wheremy.app` 是**参照实现**（另一把密钥）——正是 `KEYSTORE.md` §7 坑 1 |
+| **第二次 `install` 成功** | ⚠️ **要留意** | 设备上 `com.wheremy.app` 的 `firstInstallTime` 变成当天 08:02 → 旧包（参照实现）是**被卸载**而不是被覆盖，**它的数据已经不在手机上**；好在 `/sdcard/Download` 里还留着 10-04 / 10-05 / 10-09 三份导出 zip，数据可恢复 |
+
+**据此修的两处（都是这次核对带出来的）**：
+
+- **F38（release 卫生）**：开发期入口在 release 包里**仍然可达**（`--es dev seed` 会种演示数据、`--es dev words` 能改设置）——路由注册与 extra 解析都没按 `BuildConfig.DEBUG` 门控。修法：把 extra→路由抽成纯函数 `devRouteFor(dev, debugBuild)`（release 一律返回 null），五条开发期路由的注册整体放进 `if (BuildConfig.DEBUG)`，release 里连这些屏一起被 R8 裁掉。证据：`DevRouteGateTest` 3 例 + 真机装 release 后 `--es dev seed` **毫无反应**（照片墙仍空）。
+- **一条 flake**：`ItemRepositoryTest.confirm 位置没变时 lastMovedAt 不动` 用真实时间比两次操作的时间戳，机器一忙就可能落在同一毫秒 → 随机红（本次并发跑构建时真的红了）。改成**可控假时钟**（每次读推进 1 毫秒）。
+
+**`KEYSTORE.md` 补了坑 3**：第一次 `install` 失败之后别急着再按一次——第二次成功往往意味着旧包已被卸载、数据已丢；看到失败要先决定"并存（改 `applicationIdSuffix`）还是替换（先导出再卸载）"。
+
+**判绿双证**：**31 类 / 213 例**、`freshXml=31/31`、`failures=0 errors=0`、Spotless 通过；`assembleRelease` 出的包用用户自己的密钥签好（`apksigner` 验签通过）。
+
+---
+
 ## 2026-10-10 · `docs/KEYSTORE.md`：生成与保管 release 密钥的操作手册（+ 构建侧签名就绪）
 
 **给用户的东西**：一份**照着敲就能做完**的文档，从"keystore 是什么、为什么必须自己生成"到

@@ -196,6 +196,7 @@ D:\src\dsh\wheremy\
 | F35 | **应用根本没有桌面图标**：`res/` 里没有任何 mipmap、清单里也没写 `android:icon` → 抽屉里显示系统默认的绿色机器人 | 查 `REBUILD.md` §6 第 6 条时在真机抽屉里发现。补三份自适应图标（`mipmap-anydpi-v26/ic_launcher.xml` + 前景矢量 + 背景色 `#00695C`）与清单的 `android:icon`；并把"**前景每个坐标到圆心 ≤33**"这条安全区不变项做成 `LauncherIconTest`（前景只用 M/L/Z，好让每个数字都是坐标） |
 | F36 | **清单里没有 `INTERNET`**：没有它，`openConnection` 抛的 IO 异常被归类成 `OFFLINE`，真机上显示「网络不可用，AI 没连上」，而网络好好的 | P2 真机连模型那一跑撞出来的假话（NFR-02 违例）。补权限；教训：**"网络不可用"这句话只有真连一次才有资格说** |
 | F37 | 从相册选进来的那张是"相机界面截图"，模型回 `{"items": []}` | **不是缺陷**：照片里确实没有可归置的物品，模型判断正确。留痕（`files/ai-trace/*.txt` 里的 `outcome` 与 `response` 原文）让"是模型说的还是我们解析坏了"一眼可判——这正是留痕存在的理由 |
+| F38 | **开发期入口在 release 包里仍然可达**：`--es dev seed` 会种演示数据、`--es dev words` 能改设置——路由注册与 extra 解析都没按 `BuildConfig.DEBUG` 门控 | 用户装了自己签名的 release 包之后核对时发现。把 extra → 路由的映射抽成纯函数 `devRouteFor(dev, debugBuild)`（release 里一律返回 null），并把五条开发期路由的注册整体放进 `if (BuildConfig.DEBUG)`——release 里它们连同这些屏一起被 R8 裁掉。证据：`DevRouteGateTest`（3 例，显式传 `debugBuild=false` 钉住 release 那一支）；真机装 release 后 `--es dev seed` **没有任何反应**（照片墙仍是空的） |
 | F17 | 确认页的协程测试**不能用虚拟时间的 `runTest`**：VM 跑在 `viewModelScope`（Main），Room 的挂起查询在它自己的线程池上完成，`runTest` 会在结果回来之前结束 | 测试改成 `Dispatchers.setMain(Dispatchers.Unconfined)` + 轮询等待（`ReviewViewModelTest` 的 `awaitState`）；另有一条"用名字等待会匹配到旧槽位"的竞态要避免（改等 `saved == false`） |
 | F22 | 开发期脚手架要能**从命令行直接拉起**，别塞进产品界面 | `MainActivity` 读 `intent.getStringExtra("dev")`（`selfcheck` / `design` / `seed`）；产品界面里只在「设置」占位页留入口 |
 
