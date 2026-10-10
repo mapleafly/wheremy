@@ -59,6 +59,11 @@ data class Settings(
     val seasons: List<String> = emptyList(),
     val expireKinds: List<String> = emptyList(),
     val locationKinds: List<String> = emptyList(),
+    /** 定时自动导出（`FR-BAK-08`）：开关 + 用户选的那棵 SAF 目录树 + 上一次的结果。 */
+    val autoExportEnabled: Boolean = false,
+    val autoExportUri: String = "",
+    val autoExportLastAt: Long = 0L,
+    val autoExportLastResult: String = "",
 ) {
     /** 四样齐了才算能用：开关、key、地址、模型。 */
     val hasUsableKey: Boolean
@@ -102,6 +107,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             seasons = splitList(prefs[KEY_SEASONS]),
             expireKinds = splitList(prefs[KEY_EXPIRE_KINDS]),
             locationKinds = splitList(prefs[KEY_LOCATION_KINDS]),
+            autoExportEnabled = prefs[KEY_AUTO_EXPORT_ENABLED] ?: false,
+            autoExportUri = prefs[KEY_AUTO_EXPORT_URI].orEmpty(),
+            autoExportLastAt = prefs[KEY_AUTO_EXPORT_LAST_AT] ?: 0L,
+            autoExportLastResult = prefs[KEY_AUTO_EXPORT_LAST_RESULT].orEmpty(),
         )
     }
 
@@ -184,6 +193,27 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     private fun splitList(raw: String?): List<String> =
         raw?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
 
+    // —— 定时自动导出（`FR-BAK-08`）——
+
+    suspend fun setAutoExportEnabled(enabled: Boolean) = store.edit { it[KEY_AUTO_EXPORT_ENABLED] = enabled }.let { }
+
+    /**
+     * 记下用户选的那棵 SAF 目录树。传 null/空串 = 取消（下次自动导出会跳过并说明原因）。
+     *
+     * ⚠️ 这里只存 URI 字符串；**持久化授权**（`takePersistableUriPermission`）由界面层在拿到结果时立刻做，
+     * 否则重启后这个 URI 就打不开了。
+     */
+    suspend fun setAutoExportUri(uri: String?) = store.edit { prefs ->
+        val value = uri?.trim().orEmpty()
+        if (value.isEmpty()) prefs.remove(KEY_AUTO_EXPORT_URI) else prefs[KEY_AUTO_EXPORT_URI] = value
+    }.let { }
+
+    /** 记下这一次的结果（成功或失败都说人话），设置页照原样显示。 */
+    suspend fun setAutoExportResult(at: Long, result: String) = store.edit {
+        it[KEY_AUTO_EXPORT_LAST_AT] = at
+        it[KEY_AUTO_EXPORT_LAST_RESULT] = result
+    }.let { }
+
     companion object {
         const val DEFAULT_BASE_URL = "https://api.deepseek.com"
         const val DEFAULT_MODEL = "deepseek-flash"
@@ -204,6 +234,10 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val KEY_SEASONS = stringPreferencesKey("word_seasons")
         val KEY_EXPIRE_KINDS = stringPreferencesKey("word_expire_kinds")
         val KEY_LOCATION_KINDS = stringPreferencesKey("word_location_kinds")
+        val KEY_AUTO_EXPORT_ENABLED = booleanPreferencesKey("auto_export_enabled")
+        val KEY_AUTO_EXPORT_URI = stringPreferencesKey("auto_export_uri")
+        val KEY_AUTO_EXPORT_LAST_AT = longPreferencesKey("auto_export_last_at")
+        val KEY_AUTO_EXPORT_LAST_RESULT = stringPreferencesKey("auto_export_last_result")
     }
 }
 

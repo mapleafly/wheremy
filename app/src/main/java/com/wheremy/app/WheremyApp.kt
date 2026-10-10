@@ -3,6 +3,7 @@ package com.wheremy.app
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.wheremy.app.data.backup.AutoExportScheduler
 import com.wheremy.app.data.db.SearchTextBuilder
 import com.wheremy.app.data.repo.ItemRepository
 import com.wheremy.app.data.settings.SettingsRepository
@@ -40,6 +41,8 @@ class WheremyApp :
         super.onCreate()
         ReminderNotifier.ensureChannel(this)
         ReminderScheduler.schedule(this)
+        // 定时自动导出（FR-BAK-08）：周期任务一直在，开关在 worker 里判——这样设置里开关一下立刻生效
+        AutoExportScheduler.schedule(this)
         repairSearchTextIfNeeded()
     }
 

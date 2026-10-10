@@ -1,10 +1,13 @@
 package com.wheremy.app.di
 
 import android.content.Context
+import android.net.Uri
 import com.wheremy.app.BuildConfig
 import com.wheremy.app.data.ai.AnalysisTrace
 import com.wheremy.app.data.ai.ApiPhotoAnalyzer
+import com.wheremy.app.data.backup.AutoExporter
 import com.wheremy.app.data.backup.BackupRepository
+import com.wheremy.app.data.backup.TreeDocumentSink
 import com.wheremy.app.data.db.WheremyDatabase
 import com.wheremy.app.data.photos.PhotoStore
 import com.wheremy.app.data.repo.ItemRepository
@@ -82,6 +85,26 @@ object DataModule {
      *
      * 留痕目录**刻意不在 `files/photos` 底下**：那样它会随备份包出门。
      */
+    /**
+     * 定时自动导出（`FR-BAK-08`）。
+     *
+     * 落点是**每次现取**的：用户随时可能换目录或取消授权，缓存住一个 URI 会在下一次导出时炸。
+     */
+    @Provides
+    @Singleton
+    fun autoExporter(
+        backup: BackupRepository,
+        settings: SettingsRepository,
+        @ApplicationContext context: Context,
+    ): AutoExporter = AutoExporter(
+        backup = backup,
+        sinkProvider = {
+            val uri = settings.current().autoExportUri
+            if (uri.isBlank()) null else TreeDocumentSink(context.contentResolver, Uri.parse(uri))
+        },
+        settings = settings,
+    )
+
     @Provides
     @Singleton
     fun analysisTrace(@ApplicationContext context: Context): AnalysisTrace =

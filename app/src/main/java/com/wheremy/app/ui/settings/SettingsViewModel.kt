@@ -58,6 +58,12 @@ data class SettingsUiState(
     val busy: Boolean = false,
     /** 备份那一次的结果那句话（五种收场之一） */
     val backupResult: String? = null,
+    /** 自动导出（`FR-BAK-08`）：开关、落点、上次结果。 */
+    val autoExportEnabled: Boolean = false,
+    val autoExportUri: String = "",
+    val autoExportLastAt: Long = 0L,
+    val autoExportLastResult: String = "",
+    val autoExportBusy: Boolean = false,
     /**
      * 四套词表的**编辑草稿**（`FR-CFG-06`）：按了各自那颗「保存」才落盘。
      * 空串 = 还没动过，界面会填上当前生效的那份。
@@ -66,6 +72,25 @@ data class SettingsUiState(
     /** 当前生效的四套词表（存过的或预设）。 */
     val wordLists: WordLists? = null,
 ) {
+    /** 保存位置那行：没选时说清"要先选一个"，选了就把 URI 的尾巴露出来给人认。 */
+    val autoExportUriLine: String
+        get() {
+            if (autoExportUri.isBlank()) return "保存位置：还没选。"
+            // SAF 的 URI 里目录名是 URL 编码的（primary%3Awheremy-backup），直接截尾会露出 3A 这种怪东西
+            val decoded = runCatching { java.net.URLDecoder.decode(autoExportUri, "UTF-8") }.getOrDefault(autoExportUri)
+            val tail = decoded.substringAfterLast(':').ifBlank { decoded.substringAfterLast('/') }
+            return "保存位置：" + tail.takeLast(60)
+        }
+
+    /** 上次结果那行：**成功失败都说人话**（自动导出失败而用户不知道 = 没有备份）。 */
+    val autoExportLine: String
+        get() = when {
+            autoExportLastAt == 0L -> "还没自动导出过。"
+            else -> "上次（" + java.time.Instant.ofEpochMilli(autoExportLastAt)
+                .atZone(java.time.ZoneId.systemDefault())
+                .format(java.time.format.DateTimeFormatter.ofPattern("M月d日 HH:mm")) + "）：" + autoExportLastResult
+        }
+
     /** 设置页那一行（🗣）：0 天不许说"提前 0 天"。 */
     val leadDaysLine: String
         get() = if (leadDays == 0) "当天到期提醒" else "提前 $leadDays 天提醒"
@@ -98,6 +123,7 @@ class SettingsViewModel @Inject constructor(
     private val settings: SettingsRepository,
     private val runner: ReminderRunner,
     private val backup: BackupRepository,
+    private val exporter: com.wheremy.app.data.backup.AutoExporter,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsUiState())
@@ -119,6 +145,10 @@ class SettingsViewModel @Inject constructor(
                         apiKey = current.apiKey.ifBlank { saved.apiKey },
                         aiCalls = saved.aiCallCount,
                         aiTokens = saved.aiTokens,
+                        autoExportEnabled = saved.autoExportEnabled,
+                        autoExportUri = saved.autoExportUri,
+                        autoExportLastAt = saved.autoExportLastAt,
+                        autoExportLastResult = saved.autoExportLastResult,
                         wordLists = effective,
                         // 草稿同样只在没动过的时候填
                         wordDrafts = WordListKind.entries.associateWith { kind ->
@@ -265,6 +295,35 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun consumeBackupResult() = _state.update { it.copy(backupResult = null) }
+
+    // —— 自动导出（FR-BAK-08）——
+
+    fun setAutoExportEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settings.setAutoExportEnabled(enabled)
+            if (enabled && state.value.autoExportUri.isBlank()) {
+                _state.update { it.copy(notice = "先点「选择保存位置」挑一个文件夹，不然每天到点也没地方写。") }
+            }
+        }
+    }
+
+    fun setAutoExportUri(uri: String) {
+        viewModelScope.launch { settings.setAutoExportUri(uri) }
+    }
+
+    /** 选目录时如果持久化授权失败，也要说出来——不持久化的话重启后就写不进去了。 */
+    fun notePersistFailed(message: String?) {
+        _state.update { it.copy(notice = "目录授权没能持久化（" + (message ?: "系统拒绝") + "），重启后可能要重新选一次。") }
+    }
+
+    /** 「立刻导出一份」：与定时那一份走**同一段**逻辑（`AutoExporter.runOnce`）。 */
+    fun exportNow() {
+        viewModelScope.launch {
+            _state.update { it.copy(autoExportBusy = true) }
+            val message = runCatching { exporter.runOnce() }.getOrElse { it.message ?: "导出失败" }
+            _state.update { it.copy(autoExportBusy = false, notice = message) }
+        }
+    }
 
     companion object {
         /**

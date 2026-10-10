@@ -89,6 +89,20 @@ fun SettingsScreen(
         }
     }
 
+    // 自动导出的落点（FR-BAK-08）：选一棵目录树，并**立刻**把授权持久化——
+    // 不持久化的话重启后这个 URI 就打不开了，而"每天自动导出"恰恰要跨重启
+    val autoExportDir = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }.onFailure { vm.notePersistFailed(it.message) }
+            vm.setAutoExportUri(uri.toString())
+        }
+    }
+
     // 「回到前台就自己变」：系统设置里手动开关通知不走应用内的授权回调
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshNotifyProblem(context) }
     LaunchedEffect(state.notice) {
@@ -293,6 +307,37 @@ fun SettingsScreen(
                     Text("备份文件里不含 API key，也不含任何设置。", fontWeight = FontWeight.Bold)
                     Text("「合并导入」按主键跳过本机已经有的；「覆盖导入」先把本机清空，再按备份包重建。")
                     Text("应用已被系统设置为不做云备份（allowBackup=false），导出是你唯一的迁移手段。")
+
+                    // —— 自动导出（FR-BAK-08）——
+                    HorizontalDivider()
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm),
+                    ) {
+                        Switch(
+                            checked = state.autoExportEnabled,
+                            onCheckedChange = vm::setAutoExportEnabled,
+                        )
+                        Text("每天自动导出一份")
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
+                        OutlinedButton(onClick = { autoExportDir.launch(null) }) { Text("选择保存位置") }
+                        OutlinedButton(
+                            onClick = vm::exportNow,
+                            enabled = !state.autoExportBusy,
+                        ) { Text("立刻导出一份") }
+                    }
+                    Text(
+                        text = state.autoExportUriLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.testTag("settings_auto_export_uri"),
+                    )
+                    Text(
+                        text = state.autoExportLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.testTag("settings_auto_export_last"),
+                    )
+                    Text("自动导出每天一次，只保留最近 7 份；关掉开关就不导。文件只写进你选的那个文件夹。")
                 }
             }
 

@@ -198,6 +198,8 @@ D:\src\dsh\wheremy\
 | F37 | 从相册选进来的那张是"相机界面截图"，模型回 `{"items": []}` | **不是缺陷**：照片里确实没有可归置的物品，模型判断正确。留痕（`files/ai-trace/*.txt` 里的 `outcome` 与 `response` 原文）让"是模型说的还是我们解析坏了"一眼可判——这正是留痕存在的理由 |
 | F38 | **开发期入口在 release 包里仍然可达**：`--es dev seed` 会种演示数据、`--es dev words` 能改设置——路由注册与 extra 解析都没按 `BuildConfig.DEBUG` 门控 | 用户装了自己签名的 release 包之后核对时发现。把 extra → 路由的映射抽成纯函数 `devRouteFor(dev, debugBuild)`（release 里一律返回 null），并把五条开发期路由的注册整体放进 `if (BuildConfig.DEBUG)`——release 里它们连同这些屏一起被 R8 裁掉。证据：`DevRouteGateTest`（3 例，显式传 `debugBuild=false` 钉住 release 那一支）；真机装 release 后 `--es dev seed` **没有任何反应**（照片墙仍是空的） |
 | F39 | **横向滚动的芯片行里，被视口裁掉的那颗芯片被 ATF 判成「触摸目标只有 13dp」** | 确认页的无障碍扫描抓出来的。判定实验：把类别词表缩到 2 项（不再溢出）→ 报警消失，确认是「按可见宽度量」而不是真做小了。**修法不是抑制检查，而是让芯片换行**（`Row` → `FlowRow`）：12 颗类别芯片分三行铺开，谁都不会被裁——对被裁掉一半的芯片，读屏与手抖的用户本来就不友好 |
+| F40 | **MIUI/HyperOS 的 SAF 目录选择器不让选存储根目录与 `Download`**（「无法使用此文件夹／为保护您的隐私」） | 自动导出要用户选一个落点，而真机上根目录和 `Download` 都被系统拒了。**做法**：先用 `adb shell mkdir` 建一个自己的目录（`/sdcard/wheremy-backup`）再在选目录器里选它——**用户侧同样适用**：在选目录器里点「新建文件夹」建一个自己的文件夹即可 |
+| F41 | **真机输入法是微信输入法 + 小鹤双拼，`adb shell input text` 打不出英文** | 双拼会把字母键转成汉字，所以往「新建文件夹」对话框里 `input text wheremy-backup` 得到的是「－」。**做法**：真机自动化**不用输入法打字**——要文件/目录就先 `adb shell` 建好，再在界面里点选；万不得已要打字，先 `adb shell ime list -s` 切到 `com.android.adbkeyboard` 之类的无输入法，或改走 `content` 命令 |
 | F17 | 确认页的协程测试**不能用虚拟时间的 `runTest`**：VM 跑在 `viewModelScope`（Main），Room 的挂起查询在它自己的线程池上完成，`runTest` 会在结果回来之前结束 | 测试改成 `Dispatchers.setMain(Dispatchers.Unconfined)` + 轮询等待（`ReviewViewModelTest` 的 `awaitState`）；另有一条"用名字等待会匹配到旧槽位"的竞态要避免（改等 `saved == false`） |
 | F22 | 开发期脚手架要能**从命令行直接拉起**，别塞进产品界面 | `MainActivity` 读 `intent.getStringExtra("dev")`（`selfcheck` / `design` / `seed`）；产品界面里只在「设置」占位页留入口 |
 
