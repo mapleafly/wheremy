@@ -88,7 +88,13 @@ class ReviewViewModel @Inject constructor(
                 locationPath = locationPathOf(draft.locationId),
             )
             _state.update { it.copy(slots = listOf(slot), selected = 0, finished = false) }
-            analyze(itemId)
+            // 没有照片就不跑分析（`FR-SRC-09`）：手动填的条目**不是**"照片丢了"，
+            // 说那句"找不到这张照片了"会让人以为出了问题
+            if (slot.thumbPath != null) {
+                analyze(itemId)
+            } else {
+                _state.update { it.copy(analyzing = false, failure = null, guess = null) }
+            }
         }
     }
 

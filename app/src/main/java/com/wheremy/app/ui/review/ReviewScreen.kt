@@ -1,5 +1,6 @@
 package com.wheremy.app.ui.review
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -162,7 +163,16 @@ fun ReviewScreen(
                 onPick = onReplacePhoto,
             )
 
-            AiStatusLine(state = state, onRetry = vm::retryAnalysis)
+            // 没照片时那颗「重新分析」没有意义（没有可分析的东西），换成一句说明
+            if (state.current?.thumbPath == null) {
+                Text(
+                    text = "没有照片，不跑识别——下面的字段自己填就行。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                AiStatusLine(state = state, onRetry = vm::retryAnalysis)
+            }
 
             OutlinedTextField(
                 value = cur.draft.name,
@@ -358,9 +368,27 @@ private fun PhotoArea(thumbPath: String?, hasStoredItem: Boolean, onPick: () -> 
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+        } else {
+            // 没照片是**正常形态**（FR-SRC-09），不是缺东西：说清"这条就是手填的"，再给补照片的路
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(WheremySpacing.photoBox)
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("没有照片（手动填的条目）", style = MaterialTheme.typography.bodyMedium)
+            }
         }
         OutlinedButton(onClick = onPick) {
-            Text(if (hasStoredItem) "换一张" else "选择照片")
+            Text(
+                when {
+                    thumbPath == null -> "加一张照片"
+                    hasStoredItem -> "换一张"
+                    else -> "选择照片"
+                },
+            )
         }
     }
 }

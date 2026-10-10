@@ -202,6 +202,7 @@ D:\src\dsh\wheremy\
 | F41 | **真机输入法是微信输入法 + 小鹤双拼，`adb shell input text` 打不出英文** | 双拼会把字母键转成汉字，所以往「新建文件夹」对话框里 `input text wheremy-backup` 得到的是「－」。**做法**：真机自动化**不用输入法打字**——要文件/目录就先 `adb shell` 建好，再在界面里点选；万不得已要打字，先 `adb shell ime list -s` 切到 `com.android.adbkeyboard` 之类的无输入法，或改走 `content` 命令 |
 | F42 | **`uiautomator dump` 失败时会保留上一次的文件，直接读就会看到旧界面** | 真机自动化里踩过：点了「衣物」却读到点击前的界面，一度误判「多选没生效」（其实逻辑是对的，单测先证明了）。**做法**：`artifacts/tools/ui.ps1` —— 先 `rm` 掉 dump 文件、再 dump、再 pull，并核对文件是刚写的；取屏/点按/截图都走它 |
 | F43 | **多选工具条被右下角的 FAB 盖住「取消」** | 真机截图看出来的：四颗按钮一行在 411dp 宽屏上放不下，最右那颗正好在 FAB 底下。**做法**：按钮行改 `FlowRow`（放不下就换行）+ 工具条尾部留 88dp 给 FAB。教训：**布局问题要看截图**，dump 的 bounds 只能证明节点在，证明不了它没被别的层压住 |
+| F44 | **Kotlin 测试函数名里不能有 ASCII 双引号** | 编译出的 `.class` 文件名会带上函数名（lambda 那个合成类），而 Windows 文件名不允许 `"` → 报 `InvalidPathException: Illegal char <">`。**做法**：测试名里一律用「」（这条与 Python 脚本里不能用 ASCII 引号是同一条纪律）。真机侧另一条同源限制见 F41（微信输入法 + 小鹤双拼，`adb input text` 打不出字） |
 | F17 | 确认页的协程测试**不能用虚拟时间的 `runTest`**：VM 跑在 `viewModelScope`（Main），Room 的挂起查询在它自己的线程池上完成，`runTest` 会在结果回来之前结束 | 测试改成 `Dispatchers.setMain(Dispatchers.Unconfined)` + 轮询等待（`ReviewViewModelTest` 的 `awaitState`）；另有一条"用名字等待会匹配到旧槽位"的竞态要避免（改等 `saved == false`） |
 | F22 | 开发期脚手架要能**从命令行直接拉起**，别塞进产品界面 | `MainActivity` 读 `intent.getStringExtra("dev")`（`selfcheck` / `design` / `seed`）；产品界面里只在「设置」占位页留入口 |
 

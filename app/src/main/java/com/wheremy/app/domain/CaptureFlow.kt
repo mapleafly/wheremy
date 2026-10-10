@@ -26,6 +26,9 @@ class CaptureFlow(private val items: ItemRepository) {
     }
 
     /** 换一张：先写新文件 → 改行 → 回收旧文件（顺序在仓库里）。 */
+    /** 「不拍照，手动填」（`FR-SRC-09`）：开一条没有照片的草稿，收尾与 [capture] 一样。 */
+    suspend fun startBlank(): String = items.newBlankDraft()
+
     suspend fun replacePhoto(itemId: String, jpeg: ByteArray): ItemDraft {
         items.swapPhoto(itemId, jpeg)
         return items.draftOf(itemId)

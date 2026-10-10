@@ -60,6 +60,19 @@ class ItemRepository(
     }
 
     /** 同一张照的第二件起：**一个新文件都不写**，只多两行（共用字节靠引用计数活着）。 */
+    /**
+     * 建一条**没有照片**的草稿（`FR-SRC-09`）：给"不想拍、只想记一条"的东西。
+     *
+     * 与 [newDraft] 的差别只有一处：**不写 `item_photo` 那一行**，也不留待分析的照片。
+     * 其余（空名称、`DRAFT` 状态、进"待归类"）完全一样——所以后面每一步（确认、检索、删除）
+     * 都不需要为"没照片"另开一条路。
+     */
+    suspend fun newBlankDraft(): String {
+        val id = UUID.randomUUID().toString()
+        db.withWriteTransaction { itemDao.upsert(blankItem(id)) }
+        return id
+    }
+
     suspend fun newDraftSharingPhoto(sourceItemId: String): String {
         val source = photoDao.forOwner(PhotoOwner.ITEM, sourceItemId).firstOrNull()
             ?: error("源物品没有照片")

@@ -48,6 +48,18 @@ class CaptureViewModel @Inject constructor(private val flow: CaptureFlow) : View
         }
     }
 
+    /**
+     * 「不拍照，手动填」（`FR-SRC-09`）：复用 `captured` 这条通道——
+     * 外壳那边只认"有个新 itemId 要去确认页"，不关心它是不是拍的。
+     */
+    fun startBlank() {
+        viewModelScope.launch {
+            runCatching { flow.startBlank() }
+                .onSuccess { _captured.value = it }
+                .onFailure { _error.value = it.message ?: "建不了这条，再试一次" }
+        }
+    }
+
     fun consumeCaptured() {
         _captured.value = null
     }

@@ -8,8 +8,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -484,7 +486,21 @@ fun WheremyRoot(
             AlertDialog(
                 onDismissRequest = { askingFor = PhotoTarget.NONE },
                 title = { Text("这张照片从哪来？") },
-                text = { Text("拍照就在 Wheremy 里取景，按下快门才拍；它只要相机权限，不进相册。") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs)) {
+                        Text("拍照就在 Wheremy 里取景，按下快门才拍；它只要相机权限，不进相册。")
+                        // 「不拍照，手动填」（FR-SRC-09）：只在**新建**时给——
+                        // 换照片的时候这条没有意义（那条记录本来就有照片）
+                        if (backStack.lastOrNull() !is ReviewKey) {
+                            TextButton(
+                                onClick = {
+                                    askingFor = PhotoTarget.NONE
+                                    captureVm.startBlank()
+                                },
+                            ) { Text("不拍照，手动填") }
+                        }
+                    }
+                },
                 confirmButton = {
                     TextButton(
                         onClick = {
