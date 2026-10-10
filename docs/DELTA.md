@@ -101,7 +101,7 @@
 | `FR-PRM-02` | 相机权限：进屏自动申请一次 + 常驻出口 | 🟡 | ✅ | 比参照多做半步：进屏**自动申请一次** + 常驻「打开相机权限」出口，两件事都在 | `CameraGateTest`；真机自动权限框 + 拒绝后的取景屏 |
 | `FR-PRM-03` | 通知权限（Android 13+）被拒时降级 | ✅ | ✅ | 同参照：Android 13+ 通知权限被拒就降级，只引导去系统页 | 真机设置页与调试按钮 |
 | `FR-PRM-04` | 竖屏锁定 | ✅ | ✅ | **不锁竖屏**（参照是 ⛔ 锁竖屏）：窄窗口底栏 / 宽 ≥600dp 左侧导航轨 / 矮窗口（高 <480dp）照片墙横排格子 | `WheremyRoot` 的 `BoxWithConstraints` 分级；真机竖/横两张截图（F21 治好的那条） |
-| `FR-PRM-05` | 无障碍 | 🟡 | 🟡 | 做了一半：格子图给物品名（空名给「未命名物品」）、详情照片给「物品照片」、位置缩略图给「<位置名>的位置照片」，触摸目标沿用 M3 的 48dp；**没做** `accessibility-check` 的 ATF 深扫与 TalkBack 走查 | 真机 `uiautomator dump`（`content-desc` 是物品名）；`CameraScreenScreenshotTest` 等 5 张基线图 |
+| `FR-PRM-05` | 无障碍 | 🟡 | ✅ | **内容描述 + ATF 深扫都做完了**：格子图给物品名（空名给「未命名物品」）、详情照片给「物品照片」、位置缩略图给「<位置名>的位置照片」；**ATF（Android Accessibility Test Framework）深扫进自动化**——取景屏三态、照片墙（有物品）、确认页都在 `CheckLevel.Error` 档判红，**不需要设备、进得了 CI**；扫出来的真问题当场修掉（见 F39） | `AccessibilityScanTest`（2 例）/ `GalleryAccessibilityTest` / `ReviewAccessibilityTest`；真机 `uiautomator dump` 核过 `content-desc`。⚠️ 剩下**只有一条必须人工**：TalkBack 的**焦点次序**走查（ATF 那套规则不覆盖次序） |
 | `FR-PRM-06` | 多语言 | ⬜ | ⬜ | 同参照未做：多语言（现在中文硬编码在源码里，按 ADR-16 不抽 `strings.xml`） | — |
 
 

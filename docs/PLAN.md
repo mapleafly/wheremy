@@ -21,7 +21,7 @@
 | 先写代码还是先做 UI？ | **都不是**：先做**可运行的 UI 骨架 + 设计系统**（Phase 0），之后按**纵向切片**交替推进——每个切片一次穿过"数据契约 → VM → UI → 测试 → 真机"（§4 给理由与反例） |
 | 技术起点用哪套？ | **现行代际**，不从参照实现那套旧组合起步（§3）：Gradle wrapper 9.8.1 / AGP 9.4.1 / Kotlin 2.4.20 / KSP 2.3.12 / Compose BOM 2026.09.00（M3 1.4.0）/ Nav3 1.2.0 / Hilt 2.60.1；Room 2.x/3.x 由 Phase 0 的验证门决定 |
 | 怎么保证不比参照差？ | 四类对比 + 三个维度验收（§6）：功能矩阵、细节清单（含把 W1–W11 逐条修掉）、界面截图并排、工程质量（CI/静态检查/截图回归/无障碍） |
-| 结果记在哪？ | 本文 §10 阶段记录表 + `DELTA.md`（差异台账，逐条 FR 对照）+ 仓库根 `CHANGELOG.md` + `docs/CHANGELOG.md`（文档集自身） |
+| 结果记在哪？ | 本文 §10 阶段记录表 + `DELTA.md`（差异台账，逐条 FR 对照）+ `docs/CHANGELOG.md` + `docs/CHANGELOG.md`（文档集自身） |
 | 绝不做什么？ | **绝不修改 `D:\src\qoder\wheremy` 下的任何东西**（含不在那里跑构建）——见 §7.1 |
 
 ---
@@ -120,7 +120,7 @@ D:\src\dsh\wheremy\
 ├── .github/workflows/ci.yml      # G0/G1/G2 的门禁
 ├── artifacts/                    # 截图/导出/dump 等产物（gitignore，不提交隐私）
 ├── settings.gradle.kts / gradlew / gradlew.bat / .gitignore
-└── CHANGELOG.md                  # 软件版本记录（与 docs/CHANGELOG.md 分工见 RELEASE.md §8）
+└── （没有根目录 CHANGELOG.md：唯一一份在 docs/CHANGELOG.md，见 RELEASE.md §8.1）
 ```
 
 ### 3.3 Phase 0 的工具链验证门（spike，半天）
@@ -197,6 +197,7 @@ D:\src\dsh\wheremy\
 | F36 | **清单里没有 `INTERNET`**：没有它，`openConnection` 抛的 IO 异常被归类成 `OFFLINE`，真机上显示「网络不可用，AI 没连上」，而网络好好的 | P2 真机连模型那一跑撞出来的假话（NFR-02 违例）。补权限；教训：**"网络不可用"这句话只有真连一次才有资格说** |
 | F37 | 从相册选进来的那张是"相机界面截图"，模型回 `{"items": []}` | **不是缺陷**：照片里确实没有可归置的物品，模型判断正确。留痕（`files/ai-trace/*.txt` 里的 `outcome` 与 `response` 原文）让"是模型说的还是我们解析坏了"一眼可判——这正是留痕存在的理由 |
 | F38 | **开发期入口在 release 包里仍然可达**：`--es dev seed` 会种演示数据、`--es dev words` 能改设置——路由注册与 extra 解析都没按 `BuildConfig.DEBUG` 门控 | 用户装了自己签名的 release 包之后核对时发现。把 extra → 路由的映射抽成纯函数 `devRouteFor(dev, debugBuild)`（release 里一律返回 null），并把五条开发期路由的注册整体放进 `if (BuildConfig.DEBUG)`——release 里它们连同这些屏一起被 R8 裁掉。证据：`DevRouteGateTest`（3 例，显式传 `debugBuild=false` 钉住 release 那一支）；真机装 release 后 `--es dev seed` **没有任何反应**（照片墙仍是空的） |
+| F39 | **横向滚动的芯片行里，被视口裁掉的那颗芯片被 ATF 判成「触摸目标只有 13dp」** | 确认页的无障碍扫描抓出来的。判定实验：把类别词表缩到 2 项（不再溢出）→ 报警消失，确认是「按可见宽度量」而不是真做小了。**修法不是抑制检查，而是让芯片换行**（`Row` → `FlowRow`）：12 颗类别芯片分三行铺开，谁都不会被裁——对被裁掉一半的芯片，读屏与手抖的用户本来就不友好 |
 | F17 | 确认页的协程测试**不能用虚拟时间的 `runTest`**：VM 跑在 `viewModelScope`（Main），Room 的挂起查询在它自己的线程池上完成，`runTest` 会在结果回来之前结束 | 测试改成 `Dispatchers.setMain(Dispatchers.Unconfined)` + 轮询等待（`ReviewViewModelTest` 的 `awaitState`）；另有一条"用名字等待会匹配到旧槽位"的竞态要避免（改等 `saved == false`） |
 | F22 | 开发期脚手架要能**从命令行直接拉起**，别塞进产品界面 | `MainActivity` 读 `intent.getStringExtra("dev")`（`selfcheck` / `design` / `seed`）；产品界面里只在「设置」占位页留入口 |
 

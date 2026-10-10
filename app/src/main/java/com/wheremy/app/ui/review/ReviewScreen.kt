@@ -3,6 +3,7 @@ package com.wheremy.app.ui.review
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -421,9 +422,15 @@ private fun AiStatusLine(state: ReviewUiState, onRetry: () -> Unit) {
 private fun ChipRow(label: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs)) {
         Text(label, style = MaterialTheme.typography.labelLarge)
-        Row(
+        /*
+         * **换行**而不是横向滚动（无障碍扫描抓出来的）：
+         * 横向滚动时最后一颗芯片会被视口裁掉一部分，ATF 按**可见宽度**量它 → 报"触摸目标只有 13dp"。
+         * 实际触摸目标确实是 48dp，但"被裁掉一半的芯片"对读屏与手抖的用户本来就不友好。
+         * 换成 FlowRow 之后 12 颗类别芯片分三行铺开，谁都不会被裁。
+         */
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs),
         ) { content() }
     }
 }

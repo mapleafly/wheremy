@@ -50,7 +50,7 @@
 | 号 | 怎么涨 | 记在哪 |
 |---|---|---|
 | `versionName` | 语义化 `主.次.修`：现在 `0.1.0`；第一次带签名交付进次位，只有修缺陷才动修订位 | `app/build.gradle.kts` 的 `defaultConfig` |
-| `versionCode` | **每次出包 +1，只增不减**；同一天出两个包也要 +1 | 同上；另在仓库根 `CHANGELOG.md` 记一行（§8.1） |
+| `versionCode` | **每次出包 +1，只增不减**；同一天出两个包也要 +1 | 同上；另在`docs/CHANGELOG.md` 记一行（§8.1） |
 | `DB_SCHEMA_VERSION` | 只在 schema 变了时 +1，且**必须同时写 Migration**（§5.1） | `WheremyDatabase.kt:16` |
 
 **记账位置只有一个**：`app/build.gradle.kts` 的 `defaultConfig`；`CHANGELOG.md` 是它的历史，不是第二份真值（`RULES.md` §16 第 8 条）。
@@ -299,9 +299,9 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 
 ## 8. 发布后跟踪
 
-### 8.1 `CHANGELOG.md`（仓库根）
+### 8.1 `docs/CHANGELOG.md`（工作区唯一一份）
 
-**先分清两份同名文件**：**代码仓库根 `CHANGELOG.md`** = 软件版本记录（每一版给用户的变化、已知问题），发布负责人写；**`docs/CHANGELOG.md`** = **本文档集**的变更记录（谁在哪一轮改了哪份文档），改文档的人写。两者不是一回事。
+⚠️ 2026-10-10 更正：本节此前写「先分清两份同名文件：仓库根那份记软件版本、`docs/` 那份记文档集改动」——**工作区里只有 `docs/CHANGELOG.md` 一份**，根目录那份从来不存在。现在这一份同时承担两件事：**软件版本记录**（每一版给用户的变化、已知问题，发布负责人写）与**文档集改动**（谁在哪一轮改了哪份文档），按日期倒序、每批一节；发布那一节另起标题（见 §8.2）。
 
 仓库根现在**还没有**这份文件（`git ls-files` 里没有），发布的第一次就要建。格式照仓库既有的提交风格——中文一句话说清"改了什么以及代价"（`REBUILD.md` §9）：
 
@@ -351,7 +351,7 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 
 **准备**
 
-1. [ ] 确认这次发的是什么：改了哪些 FR / CR，逐条写进仓库根 `CHANGELOG.md`（§8.1）。
+1. [ ] 确认这次发的是什么：改了哪些 FR / CR，逐条写进`docs/CHANGELOG.md`（§8.1）。
 2. [ ] `versionCode` +1、`versionName` 按语义化定好（`app/build.gradle.kts` 的 `defaultConfig`）（§2.2）。
 3. [ ] 逐条过 ⭐ 七项（§3）并写下签收人；没做的写清为什么这次不做、什么时候做。
 4. [ ] 本次动了 schema 的话：走完 §5.1 六步，`app/schemas/…/<新号>.json` 已进 git，`fallbackToDestructiveMigration(true)` **已删除**。
@@ -410,7 +410,7 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 
 | # | 项 | 结果 | 证据 / 说明 |
 |---|---|---|---|
-| 1 | 改动逐条进 `CHANGELOG.md` | ✅ | 仓库根 `CHANGELOG.md` 六批（P0…P6b）各一节 |
+| 1 | 改动逐条进 `CHANGELOG.md` | ✅ | `docs/CHANGELOG.md` 六批（P0…P6b）各一节 |
 | 2 | 版本号 | ✅ | `1` / `0.1.0`（首个交付版，未发布过，不需要 +1） |
 | 3 | ⭐ 七项签收 | 🟡 | §3 逐条写了状态：3.1 ✅、3.2 ⬜（要用户的 keystore）、3.3–3.6 ✅、3.7 ⬜（首版无旧包） |
 | 4 | schema 变更流程 | ✅ 不适用 | 本次没动 schema；`DB_SCHEMA_VERSION = 1` 且**没有** `fallbackToDestructiveMigration` |
