@@ -41,9 +41,9 @@
 | DB schema 号 | `DB_SCHEMA_VERSION = 1`，`exportSchema = true`；**没有 `fallbackToDestructiveMigration`**（⭐FR-DB-01 已按 §3.1 满足） | `WheremyDatabase.kt` |
 | 构建入口 | **仓库里有 wrapper**（`gradlew.bat` / `gradlew`）；命令行与 CI 都用它 | 仓库根 |
 | CI | GitHub Actions：`spotlessCheck` → `testDebugUnitTest` → `verifyRoborazziDebug` → `assembleRelease`（⚠️ 尚未在真实 GitHub 上跑过） | `.github/workflows/ci.yml` |
-| 分发方式 | 侧载 APK | `PRD.md` §5 ⭐FR-RLS-01 |
+| 分发方式 | 侧载 APK（**已用用户自己的 keystore 签名**，见 §3.2 与 `KEYSTORE.md`） | `PRD.md` §5 ⭐FR-RLS-01 |
 
-**没有 release 签名 ⇒ 现在能侧载出去的只有 debug 包。** 这不是推断：`gradle :app:signingReport` 今天对 release 变体打印的是 `Config: null`、`Store: null`、`Alias: null`（本机实跑）。这也正是 ⭐FR-RLS-01 的全部内容（`PRD.md` §5，触发条件写着"侧载给别人用时"）。
+**2026-10-10 更新：⭐FR-RLS-01 已由用户完成。** 历史：在那之前 release 变体确实没有签名配置（`gradle :app:signingReport` 对 release 打印 `Config: null`），当时能侧载出去的只有 debug 包；现在用户自己生成了 keystore 并放好 `keystore.properties`（仓库外），release 包已用它签名——`signingReport` 是 `Config: release`、`apksigner verify --print-certs` 核过签名者、真机装的是正式包。做法与三个备份见 `KEYSTORE.md`。
 
 ### 2.2 版本号规则
 
@@ -93,7 +93,7 @@
 
 **为什么必须**：release 现在**用调试签名**（`signingConfig = signingConfigs.getByName("debug")`），只够做"R8 之后还跑得起来"的真机冒烟；侧载给别人用的正式包必须有自己的 keystore。
 **怎么算做完**：① 生成 keystore（口令与别名**记在密码管理器里，不写进仓库、不写进任何文档**）；② keystore 放在**仓库之外**；③ 配 `signingConfigs` + `buildTypes.release.signingConfig`（把现在那行调试签名换掉）；④ `gradle :app:signingReport` 里 release 那段不再是 `Config: null`；⑤ `apksigner verify --print-certs` 核签名者；⑥ `git status` 干净，KE 仓库里没有 keystore。
-**本实现的情况**：⬜ **未完成，且需要用户参与**——keystore 的口令与保管是用户的决定，代理不生成、不代管。
+**本实现的情况**：✅ **已完成（2026-10-10，由用户自己做）**——用户生成了 keystore（`D:\keys\wheremy-release.jks`，别名 `wheremy-release`）并在仓库外放好 `keystore.properties`；六条「怎么算做完」逐条核过：`signingReport` 是 `Config: release`（不再 null）、`apksigner verify --print-certs` 的 SHA-256 与 keytool 一致、有效期到 2054、`git status` 干净、仓库里没有 keystore 文件。**口令始终在用户手里**，本文与 `KEYSTORE.md` 只记位置不记口令。
 📖 **操作手册在 `KEYSTORE.md`**：从「生成 → 三份备份 → 写 `keystore.properties`（仓库外）→ 接进构建 → 三条验证命令 → 装机两个坑 → 换密钥不可逆」一条条写清，并附本次在本机用一把**一次性**密钥跑通整条链的实测记录。构建侧已经就绪：`app/build.gradle.kts` 会按顺序找 `<仓库父目录>/keystore.properties` 与 `~/.wheremy/keystore.properties`，**找不到就退回调试签名并在出 release 包时喊一声**——所以你把文件放好之后，不需要改任何代码。
 **谁签收**：软件经理（只有他知道 keystore 在哪）+ 架构师（配置）。
 
@@ -303,16 +303,16 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 
 ⚠️ 2026-10-10 更正：本节此前写「先分清两份同名文件：仓库根那份记软件版本、`docs/` 那份记文档集改动」——**工作区里只有 `docs/CHANGELOG.md` 一份**，根目录那份从来不存在。现在这一份同时承担两件事：**软件版本记录**（每一版给用户的变化、已知问题，发布负责人写）与**文档集改动**（谁在哪一轮改了哪份文档），按日期倒序、每批一节；发布那一节另起标题（见 §8.2）。
 
-仓库根现在**还没有**这份文件（`git ls-files` 里没有），发布的第一次就要建。格式照仓库既有的提交风格——中文一句话说清"改了什么以及代价"（`REBUILD.md` §9）：
+⚠️ 2026-10-10 更正：本节此前写「仓库根现在还没有这份文件，发布的第一次就要建」——**不要建第二份**。发布说明直接写进 `docs/CHANGELOG.md` 的新一节（标题用 `## <版本号> — <日期>（versionCode N）`），与其他节按日期倒序排在一起。格式照仓库既有的提交风格——中文一句话说清"改了什么以及代价"（`REBUILD.md` §9）：
 
 ```markdown
 # 版本记录
 
-## 0.1.0 — <日期>（versionCode 1）
+## <版本号> — <日期>（versionCode N）
 ### 新增
 - 拍照录入与 AI 预填；位置树；搜索与筛选；到期提醒；手动导出 / 导入。
 ### 已知问题
-- 改 schema 会清空本机数据（⭐FR-DB-01 未落地）；该包未做 release 签名（⭐FR-RLS-01 未落地）。
+- 只写**这一版真实存在的**已知问题；已经解决的就不要再列（例如 release 签名已于 2026-10-10 由用户完成）。
 ```
 
 **写入时机**：**出包之前**写，不是发出去之后补——`versionCode` 的记账位置就在那里（§2.2），发布记录（§8.2）要引用它。**只写用户看得懂的话**：不写 `文件:行`、不写内部批次号、不写任何 key（`REBUILD.md` §9）。
@@ -405,6 +405,10 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 
 > 这一节是**本实现**（不是参照实现）的发布记录。逐条对 §9 的 28 项；没做的那几项写清为什么、什么时候做。
 > 判据一律是**机器产生的证据**，不是"跑过了"。
+>
+> ⚠️ **后续更新（2026-10-10）**：这一节是 **2026-10-09 当时**的签收快照，**内容按当时的事实保留、不回改**。
+> 其中「⭐FR-RLS-01（release 签名）未完成」这一条**后来已由用户完成**（见 §3.2 与 `KEYSTORE.md`），
+> 所以本节表格里凡写「调试签名」的地方都只代表 10-09 那天；**看当前状态请以 §3.2 与 `docs/CHANGELOG.md` 为准**。
 
 ### 10.1 发布物
 
@@ -460,15 +464,51 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 
 | 指标 | 本实现（R8 release） | 本实现（debug） | 参照实现（记录值） |
 |---|---|---|---|
-| 冷启动（`am start -W` TotalTime，4 次中位数） | **233 ms** | 926 ms | 980 ms |
-| APK 体积 | **2.69 MB** | 17.4 MB | 18.96 MB |
+| 冷启动（`am start -W` TotalTime，**5 次中位数**） | **218 ms**（215–231） | 951 ms（939–983） | 980 ms |
+| APK 体积 | **2.62 MB** | 16.49 MB | 18.96 MB |
+
+> 复测方法：`pwsh -File artifacts/tools/measure-startup.ps1 -Runs 5`（每次先 `am force-stop` 保证是冷启动，
+> 报全部值 + 中位数，谁都能复跑出同一量级）。**2026-10-10 复测**：与本会话早期记录的 233 ms / 2.69 MB 相比，
+> 在加完批量操作、组合筛选、自动导出、无照片手填等一批功能之后**没有回退**（反而略快）。
 
 ⚠️ 比口径要诚实：参照那个 980 ms / 18.96 MB 是**同一个手机上的侧载包**，与我们的 release 包可比；与我们的 debug 包比则不公平（debug 不混淆、带着一堆调试设施）。
 
-### 10.5 结论
+### 10.5 工程侧两项评估（2026-10-10）
+
+**① Baseline Profile：现在不加。**
+
+官方入口：[Baseline Profiles overview](https://developer.android.com/topic/performance/baselineprofiles/overview)。
+它的收益是让热点代码路径预编译、省掉首次 JIT；代价是**要新加一个 `:baselineprofile` 模块 + macrobenchmark 用例 +
+在设备上生成并随版本维护 profile**。
+
+判据是量出来的数字：release 冷启动**中位数 218 ms**，且这个包只有 2.62 MB、单用户本地应用。
+在这个量级上加一套模块与生成流程，收益（几十毫秒）与维护成本不成比例。
+
+**触发条件**（满足任一条再回来做）：① release 冷启动回退到 **400 ms** 以上；
+② 冷启动时出现肉眼可感的卡顿（列表首帧、缩略图加载）；③ 包体或启动路径显著变重（例如引入大库、首屏要读全库）。
+
+**② `targetSdk`：保持 36，等设备到 37 再评估。**
+
+- 现状：`compileSdk = 37`（Compose 1.12.1 的 AAR 元数据要求，见 §3.3 F1）、`targetSdk = 36`、`minSdk = 26`；
+- **设备是 Android 16 / API 36**（`ro.build.version.sdk = 36`）——targetSdk 37 的行为在**唯一那台真机上根本跑不到**，
+  现在跳上去等于"改了一堆测不了的行为"；
+- Android 17（API 37）已知的一条主要变更是**大屏上应用的方向/可调整大小限制被忽略**
+  （[Behavior changes: Apps targeting Android 17](https://developer.android.com/about/versions/17/behavior-changes-17)、
+  [Prepare your app for the resizability and orientation changes in Android 17](https://developer.android.com/blog/posts/prepare-your-app-for-the-resizability-and-orientation-changes-in-android-17)）。
+  我们**不锁方向**：清单里没有 `screenOrientation` / `resizeableActivity` / `configChanges` 覆盖，
+  横屏与矮窗口早就按自适应做过（F21 那条），所以这条变更对我们**没有可预见的破坏**；
+- 另两项常见要求本来就不适用：**16 KB 页大小**（本应用**没有原生库**，`jniLibs` 为空）、
+  `allowBackup` 已是 `false`（NFR-03）。
+
+**等设备升到 API 37 时，按这四条复查**：① 大屏/折叠屏上的方向与尺寸行为；
+② edge-to-edge 与窗口 insets（自适应已经处理过一轮，但要再看一遍）；
+③ 通知与 WorkManager 的配额/权限有没有新要求（到期提醒、自动导出两条链路）；
+④ 升级 `targetSdk` 后把 `RELEASE.md` §3 的七项 ⭐ 与 §9 清单重跑一遍。
+
+### 10.6 结论
 
 **可以发布给用户自己用（侧载）**：功能闭环、备份出口、到期提醒、相机取证都真机走过一遍，测试与截图回归都有基线。
-**不可以当作"给别人用的正式包"**：⭐FR-RLS-01（自己的 keystore）没做，release 现在是调试签名——这一步需要用户的 keystore 与口令保管决定，代理由此停手并记录在 §3.2。
+**可以当作"给别人用的正式包"**：⭐FR-RLS-01 已由用户完成——用户自己生成了 keystore（`D:\keys\wheremy-release.jks`，别名 `wheremy-release`）并放好 `keystore.properties`，release 包已用它签名、`apksigner` 校验通过（`Config: release`）、真机安装为正式包。口令始终在用户手里，文档只记位置不记口令（`KEYSTORE.md` §12）。
 
 ---
 

@@ -26,6 +26,9 @@ release/
 artifacts/*
 !artifacts/tools/
 
+# 临时提交信息文件（用 `git commit -F` 避免 PowerShell 引号地狱，但别把它本身提交进去——踩过两次）
+artifacts/tools/commit-msg*.txt
+
 # 参照实现的只读副本（只在本地构建参照 APK 用，绝不提交、绝不回写原目录）
 .reference/
 

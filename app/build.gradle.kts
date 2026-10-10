@@ -36,7 +36,7 @@ val keystoreProperties: Properties? =
 android {
     namespace = "com.wheremy.app"
     // Compose 1.12.1（BOM 2026.09.00）的 AAR 元数据要求 compileSdk ≥ 37；
-    // targetSdk 仍保持 36（运行时行为不跟着跳，等 P6 统一评估）。
+    // targetSdk 保持 36：设备是 API 36，跳上去等于改一堆测不了的行为；评估见 RELEASE.md §10.5。
     compileSdk = 37
 
     defaultConfig {
