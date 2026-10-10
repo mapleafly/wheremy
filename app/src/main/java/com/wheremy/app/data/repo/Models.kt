@@ -41,7 +41,22 @@ data class Filters(
     val tag: String? = null,
     val onlyInbox: Boolean = false,
     val expireUntil: Long? = null,
+    /**
+     * 结果排序（`FR-FND-09`）。
+     *
+     * 🔒 `DEFAULT` 就是现在这套、一个字都不改：**空查询按插入序**（`RULES.md` §10.1 的 `all()` 没有 ORDER BY）、
+     * **有查询按相关度**（`SearchRanker`）。其余三种是用户**显式**选的，选了就以排序为准。
+     */
+    val sort: SortOrder = SortOrder.DEFAULT,
 )
+
+/** 结果排序的四个选项（`FR-FND-09`）。 */
+enum class SortOrder(val label: String) {
+    DEFAULT("默认"),
+    RECENTLY_MOVED("最近动过"),
+    RECENTLY_UPDATED("最近更新"),
+    NAME("名称"),
+}
 
 /** 列表页一行要的全部。 */
 data class ItemSummary(val item: ItemEntity, val tags: List<String>, val thumbPath: String?, val locationPath: String?)

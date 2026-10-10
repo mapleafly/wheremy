@@ -52,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.wheremy.app.data.repo.ItemRepository
 import com.wheremy.app.data.repo.ItemSummary
+import com.wheremy.app.data.repo.SortOrder
 import com.wheremy.app.ui.UiFormat
 import com.wheremy.app.ui.theme.WheremySpacing
 import com.wheremy.app.util.daysUntil
@@ -288,6 +289,16 @@ private fun FilterBar(state: GalleryUiState, expanded: Boolean, onToggleExpanded
                             selected = state.filters.season == season,
                             onClick = { vm.toggleSeason(season) },
                             label = { Text(season) },
+                        )
+                    }
+                }
+                // 排序（FR-FND-09）：只改顺序不改集合；再点当前那颗 = 回默认
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
+                    SortOrder.entries.forEach { order ->
+                        FilterChip(
+                            selected = state.filters.sort == order,
+                            onClick = { vm.setSort(order) },
+                            label = { Text("排序：${order.label}") },
                         )
                     }
                 }

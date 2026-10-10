@@ -311,8 +311,30 @@ class ItemRepository(
             base.filter { it.id in ids }
         }
         val filtered = tagOk.filter { matches(it, filters) }
-        val rows = if (q.isEmpty()) filtered else SearchRanker.rank(filtered, q)
+        val rows = when {
+            // 用户显式选了排序就以排序为准（`FR-FND-09`）；没选时一个字都不改
+            filters.sort != SortOrder.DEFAULT -> sortRows(filtered, filters.sort)
+            q.isEmpty() -> filtered
+            else -> SearchRanker.rank(filtered, q)
+        }
         return SearchOutcome(rows = rows, capped = capped)
+    }
+
+    /**
+     * 用户显式选的排序（`FR-FND-09`）。三种都用**稳定排序**，同键的保持原有相对次序。
+     *
+     * - `RECENTLY_MOVED`：`lastMovedAt` 倒序——没搬过的（null）回落到 `createdAt`，否则它们会挤到最后；
+     * - `RECENTLY_UPDATED`：`updatedAt` 倒序；
+     * - `NAME`：按名称升序（中文按字符串序，不是拼音序——与标签那处的口径一致）。
+     */
+    private fun sortRows(rows: List<ItemEntity>, sort: SortOrder): List<ItemEntity> = when (sort) {
+        SortOrder.RECENTLY_MOVED -> rows.sortedWith(
+            compareByDescending<ItemEntity> { it.lastMovedAt ?: it.createdAt }.thenByDescending { it.updatedAt },
+        )
+
+        SortOrder.RECENTLY_UPDATED -> rows.sortedByDescending { it.updatedAt }
+        SortOrder.NAME -> rows.sortedBy { it.name }
+        SortOrder.DEFAULT -> rows
     }
 
     suspend fun inbox(): List<ItemEntity> = itemDao.inbox()

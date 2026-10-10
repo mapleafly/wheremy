@@ -8,6 +8,7 @@ import com.wheremy.app.data.repo.ItemRepository
 import com.wheremy.app.data.repo.ItemSummary
 import com.wheremy.app.data.repo.LocationRepository
 import com.wheremy.app.data.repo.SEASONS
+import com.wheremy.app.data.repo.SortOrder
 import com.wheremy.app.data.settings.SettingsRepository
 import com.wheremy.app.ui.PendingDelete
 import com.wheremy.app.ui.UiFormat
@@ -62,6 +63,8 @@ data class GalleryUiState(
                 if (filters.expireUntil != null) add("快到期/已过期")
                 filters.season?.let { add("季节：$it") }
                 filters.tag?.let { add("#$it") }
+                // 排序不是"筛选"，但它是展开面板里选出来的——折起来时也得看得见（FR-FND-09）
+                if (filters.sort != SortOrder.DEFAULT) add("排序：${filters.sort.label}")
             }
             return if (picked.isEmpty()) "更多筛选" else "更多筛选 · " + picked.joinToString(" ")
         }
@@ -155,6 +158,16 @@ class GalleryViewModel @Inject constructor(
         _state.update {
             it.copy(filters = it.filters.copy(category = if (it.filters.category == category) null else category))
         }
+        refresh()
+    }
+
+    /**
+     * 结果排序（`FR-FND-09`）。**只改顺序、不改集合**，也不动查询与筛选。
+     * 再点一次当前那颗 = 回到「默认」。
+     */
+    fun setSort(sort: SortOrder) {
+        val next = if (_state.value.filters.sort == sort) SortOrder.DEFAULT else sort
+        _state.update { it.copy(filters = it.filters.copy(sort = next)) }
         refresh()
     }
 
