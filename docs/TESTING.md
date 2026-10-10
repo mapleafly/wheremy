@@ -295,3 +295,4 @@ EXIF 方向、HyperOS 权限弹窗与静默驳回、桌面图标渲染、长名�
 | 覆盖对账结果 | 每批改动（G3 证据） | 正反两次命令的输出 |
 | 缺陷单 | 发现问题时 | `templates/defect-report.md` |
 | 真机验收单 | 交付/发布前（G5） | `templates/device-acceptance.md` |
+| TalkBack 走查单 | 交付/发布前（G5，无障碍专项） | `templates/talkback-walkthrough.md` |

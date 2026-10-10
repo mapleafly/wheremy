@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-10-10 · CI 首次真跑全绿（并修掉它抓出来的三处问题）+ TalkBack 走查单
+
+**第一次在真实 GitHub 上跑 CI**：私人仓库 [`mapleafly/wheremy`](https://github.com/mapleafly/wheremy)，
+run [`38056478443`](https://github.com/mapleafly/wheremy/actions/runs/38056478443)，**8m32s，四道门全 success**（Spotless → 单元测试 → 截图回归 → R8 发布构建）。
+
+**这一轮最大的价值是"真跑抓出了三个本地永远发现不了的问题"**（都记进 `PLAN.md` §3.4）：
+
+1. **`gradlew` 没有可执行位**（Windows 上 git 不保留 Unix 权限位）→ runner 上 `./gradlew` 报 **exit 126**
+   （找到了但不可执行）。本地一直用 `gradlew.bat`，所以永远撞不到；
+2. **仓库配置里硬编码的阿里云镜像把 CI 搞红了（F46）**：报「KSP 插件在所有仓库里找不到」。
+   在 runner 上 curl 实测——Maven Central **200**、plugins.gradle.org **303**、**两个阿里云镜像都是 502**。
+   镜像排在 `pluginManagement` 第一位，插件解析整体失败；而且对本机也没用（本机另有 init 脚本挂了同样的镜像，
+   真正生效的是那一份）。**修法**：仓库配置只用官方三源（可移植），镜像归本机 init 脚本。
+   教训：**「本机加速」不能写进仓库配置**；
+3. **两条无障碍测试的 flake（F47）**：`verifyRoborazziDebug` 在 runner 上挂在 `ReviewAccessibilityTest`
+   的 `waitUntil` 超时，而本地同一条命令通过。根因是这两条测试没把 `Dispatchers.Main` 设成 `Unconfined`，
+   VM 协程靠主 Looper 推进，runner 慢/忙时就等不到。已与其它 VM 测试统一。
+
+**顺带**：把仓库推到了 GitHub 之后，`.gitignore` 里 `artifacts/tools/` 的脚本也一并入库（文档点名引用它们）。
+
+**新增 `docs/templates/talkback-walkthrough.md`**：`FR-PRM-05` 里唯一必须人工的一条——
+**TalkBack 焦点次序走查**（ATF 自动化只覆盖「有没有名字、触摸目标够不够大」，**次序只能靠人听**）。
+清单按屏分 7 段（照片墙 / 位置 / 待归类 / 确认页 / 详情 / 多选态 / 设置），每段写清"应该听到什么次序"与"要盯哪几件事"；
+已登记进 `PROCESS.md` §5（G5b）、`TESTING.md`、`PROJECT.md`、`RELEASE.md` §9 第 22 条。
+
+---
+
 ## 2026-10-10 · 工程侧收尾：冷启动基线复测 + Baseline Profile / targetSdk 37 两项评估
 
 **冷启动复测**（`am start -W` TotalTime，5 次中位数，同一台机器）：

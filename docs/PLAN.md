@@ -103,7 +103,7 @@
 | 图片 / 网络 / 序列化 | Coil 3.6.3 / OkHttp 5.5.0 + `mockwebserver3` / kotlinx.serialization 1.11.0 / coroutines 1.11.0 | — | OkHttp 5 的测试包名变了，import 要写对 |
 | 质量 | Spotless 8.10.3 + ktlint 插件 14.2.0 + AGP Lint | — | **不引 detekt**（2.x 仍 alpha，官方样板也不用） |
 | 测试 | JUnit 4.13.2 / Robolectric 4.17 / androidx.test:core 1.7.0 / coroutines-test 1.11.0 / Roborazzi 1.76.0 | — | JVM 为主；截图回归从 Phase 0 就接 |
-| CI | GitHub Actions：`checkout@v6` + `setup-java@v5` + `gradle/actions/setup-gradle@v4` + `upload-artifact@v4` | — | 四道门：`spotlessCheck` → `testDebugUnitTest` → `verifyRoborazziDebug` → `assembleRelease`（`.github/workflows/ci.yml`）。**2026-10-10 修正**：原写的 `checkout@v7`/`setup-java@v6` 这两个大版本**不存在**（核对到的最新是 v6/v5），写错版本号会让第一次跑直接红；同时补了 `concurrency` 与最小 `permissions`。**内容已本地等价跑通**（`artifacts/tools/ci-local.ps1 -Cold`：clean + 禁缓存 + 强制重跑，四步全绿）；**真 GitHub 上仍未跑过**——本工作区没有 git 远端，建仓库与首次推送必须由人做（命令见 `RELEASE.md` §9 第 10 条） |
+| CI | GitHub Actions：`checkout@v6` + `setup-java@v5` + `gradle/actions/setup-gradle@v4` + `upload-artifact@v4` | — | 四道门：`spotlessCheck` → `testDebugUnitTest` → `verifyRoborazziDebug` → `assembleRelease`（`.github/workflows/ci.yml`）。**2026-10-10 修正**：原写的 `checkout@v7`/`setup-java@v6` 这两个大版本**不存在**（核对到的最新是 v6/v5），写错版本号会让第一次跑直接红；同时补了 `concurrency` 与最小 `permissions`。**内容已本地等价跑通**（`artifacts/tools/ci-local.ps1 -Cold`：clean + 禁缓存 + 强制重跑，四步全绿）；**2026-10-10 首次真跑全绿**：`mapleafly/wheremy`（私人仓库），run [`38056478443`](https://github.com/mapleafly/wheremy/actions/runs/38056478443)，8m32s，四道门 + 上传产物全 success |
 | SDK | compileSdk **37**、targetSdk **36**、minSdk **26**、JVM target **17** | — | **实测修正**：Compose 1.12.1 的 AAR 元数据要求 compileSdk ≥ 37（详见 §3.3 实测结果 F1）；targetSdk 保持 36；`java.time` 在 26 上原生可用，**不要加 desugaring** |
 | 应用 id | `com.wheremy.app` + debug 变体后缀 **`.dsh`** | — | 让"参照包"与"本实现包"能在同一台真机并存、同屏对比（§6.2） |
 
@@ -160,7 +160,7 @@ D:\src\dsh\wheremy\
 | 6 | Nav3 往返（两个目的地 + 返回栈） | ✅ | `NavDisplay` + `entryProvider`；返回键走 `onBack` |
 | 7 | **Room 3 验证门** | ✅ **选 Room 3** | `androidx.room3:room3-runtime 3.0.3` + `room3-compiler`(KSP)：内存库读写通过；schema 已导出 `app/schemas/…/1.json` |
 | 8 | Roborazzi golden | ✅ | `design-gallery-light.png` / `design-gallery-dark.png`（411×891，实图已人工看过） |
-| 9 | CI | ⏳ 文件已写，**未在真 GitHub 上执行** | `.github/workflows/ci.yml` |
+| 9 | CI | ✅ **2026-10-10 首次真跑全绿**（`mapleafly/wheremy` 私人仓库，run `38056478443`，8m32s，四道门全 success）；首跑抓出并修掉三处：`gradlew` 缺可执行位（exit 126）、阿里云镜像在 runner 上 502 导致插件解析全盘失败、无障碍测试的 Main 调度器 flake | `.github/workflows/ci.yml` |
 | 10 | 真机安装 + 冒烟（`9aa4b43e`） | ✅ **通过**（2026-10-08 晚补测） | 安装 `Success`；冷启动 `TotalTime 569 ms`（竖屏）/ `619 ms`（横屏）；`topResumedActivity` = 本应用；`pidof` 有进程；`logcat -b crash` 为空；点击进画廊、**返回键正确回到上一屏且进程不退**（Nav3 `onBack` 生效）；竖屏/横屏各留截图 |
 
 **实测发现（全部已解决或已入档）**：
@@ -208,6 +208,8 @@ D:\src\dsh\wheremy\
 | F43 | **多选工具条被右下角的 FAB 盖住「取消」** | 真机截图看出来的：四颗按钮一行在 411dp 宽屏上放不下，最右那颗正好在 FAB 底下。**做法**：按钮行改 `FlowRow`（放不下就换行）+ 工具条尾部留 88dp 给 FAB。教训：**布局问题要看截图**，dump 的 bounds 只能证明节点在，证明不了它没被别的层压住 |
 | F44 | **Kotlin 测试函数名里不能有 ASCII 双引号** | 编译出的 `.class` 文件名会带上函数名（lambda 那个合成类），而 Windows 文件名不允许 `"` → 报 `InvalidPathException: Illegal char <">`。**做法**：测试名里一律用「」（这条与 Python 脚本里不能用 ASCII 引号是同一条纪律）。真机侧另一条同源限制见 F41（微信输入法 + 小鹤双拼，`adb input text` 打不出字） |
 | F45 | **`searchTextVersion` 的缺省值取了当前 `FIELD_VERSION`，于是字段版本升了对老库完全不生效** | 真机上发现：加了类别/季节（版本 2→3）之后重启，老数据的 `search_text` 里还是没有它们。原因：缺省值 = 当前版本 → 键不存在时闸门恒假 → 永远不补算。**修法**：缺省 **0**（= 从没补算过），首次启动多跑一次 `rebuildSearchText`（它只写真的变了的行）。教训：闸门类字段的缺省必须是「未知」，不能是「最新」 |
+| F46 | **仓库配置里硬编码中国大陆镜像，把 CI 搞红了** | 第一次真 CI 报「KSP 插件在所有仓库里找不到」。在 runner 上 curl 实测：Maven Central **200**、plugins.gradle.org **303**、两个阿里云镜像**都是 502**——镜像排在 `pluginManagement` 第一位，插件解析整体失败。而且对本机也没用：本机另有 init 脚本挂了同样的镜像，真正生效的是那一份。**修法**：仓库配置只用官方三源（可移植），镜像归本机 init 脚本。教训：**「本机加速」不能写进仓库配置** |
+| F47 | **两条无障碍测试没设 Main 调度器，在慢 runner 上 flake** | `verifyRoborazziDebug` 在 runner 上挂在 `ReviewAccessibilityTest` 的 `waitUntil` 超时；本地同一条命令却通过 → flake。根因：这两条测试没把 `Dispatchers.Main` 设成 `Unconfined`，VM 协程靠主 Looper 推进。**修法**：与其它 VM 测试统一，`@Before` 设 Unconfined、`@After` reset。教训：**CI 的机器比本机慢，超时类断言要留足余量，且别依赖 Looper 推进** |
 | F17 | 确认页的协程测试**不能用虚拟时间的 `runTest`**：VM 跑在 `viewModelScope`（Main），Room 的挂起查询在它自己的线程池上完成，`runTest` 会在结果回来之前结束 | 测试改成 `Dispatchers.setMain(Dispatchers.Unconfined)` + 轮询等待（`ReviewViewModelTest` 的 `awaitState`）；另有一条"用名字等待会匹配到旧槽位"的竞态要避免（改等 `saved == false`） |
 | F22 | 开发期脚手架要能**从命令行直接拉起**，别塞进产品界面 | `MainActivity` 读 `intent.getStringExtra("dev")`（`selfcheck` / `design` / `seed`）；产品界面里只在「设置」占位页留入口 |
 

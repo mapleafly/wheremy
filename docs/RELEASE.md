@@ -363,7 +363,7 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 
 8. [ ] 前台跑 `gradle :app:testDebugUnitTest`，拿到 `BUILD SUCCESSFUL`（§6.1）。
 9. [ ] 数 XML：`app/build/test-results/testDebugUnitTest/*.xml` **42 份**，mtime 全部晚于本轮起跑时刻（G1）。（也可直接 `pwsh -File artifacts/tools/ci-local.ps1 -Cold`：它会替你把四道门跑完并报测试合计。）
-10. [ ] **CI 首次真跑**（只在第一次或换了远端时做）：本工作区**没有 git 远端**，所以这一步必须由人做——
+10. [x] **CI 首次真跑** ✅ **2026-10-10 已完成**：私人仓库 `mapleafly/wheremy`，run [`38056478443`](https://github.com/mapleafly/wheremy/actions/runs/38056478443)，8m32s，四道门全 success。（首跑抓出三处问题，见 `PLAN.md` §3.3 第 9 步与 F46/F47。）以下为当时的操作步骤，换远端时重做——
     ```
     # 1) 在 GitHub 上建一个空仓库（不要勾 README/.gitignore）
     git remote add origin git@github.com:<你的账号>/<仓库名>.git
@@ -386,7 +386,8 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 18. [ ] 环境快照第 2 行：本机数据是否为空、`POST_NOTIFICATIONS` 是否还没授过（§6.4）。
 19. [ ] **先导出**：设置页 → 备份 →「导出到文件」，记下回执那三个数（§7.3）。
 20. [ ] `install -r` → `am force-stop` → `am start`，点开不崩（§6.3）。
-21. [ ] 真机人工清单七条逐条签收（`REBUILD.md` §6）；交给用户的那份用 `templates/device-acceptance.md`，**不许出现内部编号**。
+21. [ ] 真机人工清单七条逐条签收（`REBUILD.md` §6）；交给用户的那份用 `templates/device-acceptance.md`
+22. [ ] **无障碍专项：TalkBack 焦点次序走查**（`FR-PRM-05` 里唯一必须人工的一条）——交给用户的那份用 `docs/templates/talkback-walkthrough.md`；ATF 自动化只覆盖「有没有名字/触摸目标够不够大」，**次序只能靠人听**（§10.5），**不许出现内部编号**。
 22. [ ] 迁移演练：旧版本的包 →「合并导入」对账 →「覆盖导入」对账（§3.7）。
 23. [ ] 反面演练：把包的 `schemaVersion` 改成 `2`，导入被拒且本机数据一条没动（§5.2）。
 24. [ ] 备份包自查：包里没有 key、没有任何设置项（只看条目名，**别把包内容贴进任何文档**）。
