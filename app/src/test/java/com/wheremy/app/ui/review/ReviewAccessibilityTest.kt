@@ -19,7 +19,13 @@ import com.wheremy.app.data.testJpeg
 import com.wheremy.app.domain.CaptureFlow
 import com.wheremy.app.ui.capture.CaptureViewModel
 import com.wheremy.app.ui.theme.WheremyTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -35,6 +41,7 @@ import java.io.File
  * 这一屏是表单最密的一屏：一排排芯片、若干输入框、右上角两颗文字按钮。
  * 触摸目标尺寸这类问题最容易在这里冒出来，所以它也进 ATF 的 Error 档。
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w411dp-h891dp")
@@ -42,6 +49,18 @@ class ReviewAccessibilityTest {
 
     @get:Rule
     val compose = createComposeRule()
+
+    @Before
+    fun setUpDispatcher() {
+        // VM 的协程跑在 viewModelScope（Dispatchers.Main）上；设成 Unconfined 后立即执行，
+        // 不再看主 Looper 的脸色——CI runner 慢的时候后者会让 waitUntil 超时（这条 flake 就是真 CI 抓到的）
+        Dispatchers.setMain(Dispatchers.Unconfined)
+    }
+
+    @After
+    fun tearDownDispatcher() {
+        Dispatchers.resetMain()
+    }
 
     @get:Rule
     val tmp = TemporaryFolder()
