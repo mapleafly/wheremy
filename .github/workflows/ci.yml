@@ -49,6 +49,18 @@ jobs:
           java -version
           ./gradlew --version --console=plain
 
+      # 临时诊断：runner 到底能不能取到 KSP 的插件标记（排查「not found」是网络还是 Gradle 层面）
+      - name: 诊断（临时）：取 KSP 插件标记
+        run: |
+          for u in \
+            "https://repo.maven.apache.org/maven2/com/google/devtools/ksp/com.google.devtools.ksp.gradle.plugin/2.3.12/com.google.devtools.ksp.gradle.plugin-2.3.12.pom" \
+            "https://plugins.gradle.org/m2/com/google/devtools/ksp/com.google.devtools.ksp.gradle.plugin/2.3.12/com.google.devtools.ksp.gradle.plugin-2.3.12.pom" \
+            "https://maven.aliyun.com/repository/gradle-plugin/com/google/devtools/ksp/com.google.devtools.ksp.gradle.plugin/2.3.12/com.google.devtools.ksp.gradle.plugin-2.3.12.pom" \
+            "https://maven.aliyun.com/repository/public/com/google/devtools/ksp/com.google.devtools.ksp.gradle.plugin/2.3.12/com.google.devtools.ksp.gradle.plugin-2.3.12.pom" ; do
+            printf '%s → ' "$u"
+            curl -s -o /dev/null -w '%{http_code}\n' --max-time 25 "$u" || echo "curl 失败(退出码 $?)"
+          done
+
       # 依赖源：仓库里配了阿里云镜像在前、google()/mavenCentral() 兜底（settings.gradle.kts），
       # 海外 runner 上镜像不通时会自动回落到官方源。
       - name: 静态检查（Spotless/ktlint）
