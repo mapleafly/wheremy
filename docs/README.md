@@ -23,7 +23,7 @@
 | 数据 | 全部在本地；手动导出 zip 是唯一的迁移手段 | `PRD.md` FR-BAK、`RULES.md` §12 |
 | AI 的角色 | 加速器不是闸门：AI 慢、坏、没配 key 都不影响录入与查找 | `PRD.md` FR-AI-06、`RULES.md` §13 |
 | 成功判据 | 5 条可测判据 G1–G5 | `PRD.md` §1.1 |
-| 当前形态 | 验收期：schema 冻结、无 release 签名、破坏性迁移未换 | `REBUILD.md` §2、`PRD.md` ⭐FR-DB-01/⭐FR-RLS-01 |
+| 当前形态 | **可交付**（2026-10-12）：release 已用用户自己的 keystore 签名、R8 已开、真机人工清单七条全过（`RELEASE.md` §10.7）；schema 仍冻结、本实现未引入破坏性迁移 | `RELEASE.md` §3/§10.7、`PRD.md` ⭐FR-DB-01/⭐FR-RLS-01 |
 
 ---
 

@@ -612,7 +612,7 @@ HTTP 状态**已经落地**：`TraceEntry` 有 `status: Int?`（`AnalysisTrace.k
 | id | 条目 | 触发条件 | 代价 |
 |---|---|---|---|
 | ⭐ FR-DB-01 | 用真实 Room Migration 替换破坏性迁移 | ~~发布前必做~~ **本实现不存在这个债**（从第一天就没引入 `fallbackToDestructiveMigration`，版本一升没交 Migration 会当场抛错） | 0：已还清；将来真升 schema 时走 `RELEASE.md` §5.1 六步 |
-| ⭐ FR-RLS-01 | release 签名包（现在用调试签名） | 侧载给别人用时（**用户已拍板"后续再做"**） | 小-中：要生成/保管 keystore，且**不进 git** |
+| ⭐ FR-RLS-01 | release 签名包 | ~~侧载给别人用时~~ **已完成（2026-10-10，用户自己做）** | 已还清：用户生成并保管 keystore（仓库外 `keystore.properties`，**不进 git**），release 包已正式签名；做法见 `KEYSTORE.md` |
 | FR-LOC-08 | 位置候选裁剪 | 路径数到几百条 | 中 |
 | FR-AI-09 | AI 预填到期日/数量 | 批量录食品药品 | 中（要加合并规则与解析） |
 | FR-AI-10 | 对已确认物品批量重跑 | 模型换代 | 中（要新写覆盖规则） |

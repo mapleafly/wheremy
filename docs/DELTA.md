@@ -111,7 +111,7 @@
 | 项 | 参照状态 | 本实现 | 说明 | 证据 |
 |---|---|---|---|---|
 | ⭐FR-DB-01 真实 Room Migration | ⬜ 发布前必做 | ⬜ | 本实现**从第一天就不引入破坏性迁移**，所以这条天然成立；但"升级路径"仍要写 migration + 测试 | |
-| ⭐FR-RLS-01 release 签名包 | ⬜ 未做 | ⬜ | 目标 P6 出一份可侧载的签名包（keystore 不进 git） | |
+| ⭐FR-RLS-01 release 签名包 | ⬜ 未做 | ✅ **已完成（2026-10-10，用户自己做）** | 用户生成 keystore、仓库外放 `keystore.properties`；`signingReport` 为 `Config: release`，真机装的是正式签名包（`KEYSTORE.md`） | |
 
 ---
 

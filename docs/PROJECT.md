@@ -51,8 +51,8 @@ Wheremy 是一个**单人单机**的 Android 应用：把家里东西拍一张�
 
 | id | 条目 | 为什么卡发布 | 现状 |
 |---|---|---|---|
-| ⭐FR-DB-01 | 用真实 Room Migration 替换 `fallbackToDestructiveMigration(true)` | 现在改任何 `@Entity` 字段 = **静默清空整机数据**（`RULES.md` §15 W2） | 未做 |
-| ⭐FR-RLS-01 | release 签名包（现 `isMinifyEnabled = false` 且无 signingConfig） | 无法稳定侧载给别人用、无法升级安装 | 未做 |
+| ⭐FR-DB-01 | 用真实 Room Migration 替换 `fallbackToDestructiveMigration(true)` | 现在改任何 `@Entity` 字段 = **静默清空整机数据**（`RULES.md` §15 W2） | **本实现没有这个债**：从第一天就没引入 `fallbackToDestructiveMigration`（`WheremyDatabase.kt:15` 注释写明），版本一升没交 Migration 会当场抛错而不是清库。真升 schema 时按 `REBUILD.md` §2 走（写 Migration + 测试） |
+| ⭐FR-RLS-01 | release 签名包 | 无法稳定侧载给别人用、无法升级安装 | ✅ **2026-10-10 完成（用户自己做）**：用户生成 keystore 并在仓库外放好 `keystore.properties`；`signingReport` 是 `Config: release`，真机装的是正式签名包。另：R8 早已打开（`isMinifyEnabled = true` + `isShrinkResources = true`，`app/build.gradle.kts:76-77`），旧的「未混淆」说法已过期 |
 
 ---
 
@@ -125,8 +125,8 @@ Wheremy 是一个**单人单机**的 Android 应用：把家里东西拍一张�
 
 | # | 风险 | 概率 | 影响 | 触发信号 | 缓解 / 现状 |
 |---|---|---|---|---|---|
-| R1 | **改 schema 静默清空整机数据**（`fallbackToDestructiveMigration(true)`） | 中 | 极大（数据不可逆） | 任何一次想改 `@Entity` 的冲动 | 验收期冻结字段（`REBUILD.md` §2 第 1 条）；解禁 = ⭐FR-DB-01 落地；改前必须先导出 |
-| R2 | 无 release 签名 / 未混淆 | 高（一旦要分发） | 中 | 要把包给别人用时 | ⭐FR-RLS-01；`RELEASE.md` §3 |
+| R1 | **改 schema 的升级路径**（本实现没有破坏性迁移，风险已降级） | 低 | 大（升错会抛错/丢数据） | 任何一次想改 `@Entity` 的冲动 | 本实现没引入 `fallbackToDestructiveMigration`，所以「静默清空」这条风险不存在；要改 schema 仍按 `REBUILD.md` §2 走：写 Migration + migration 测试 + 改前先导出 |
+| R2 | ~~无 release 签名 / 未混淆~~ **已消解（2026-10-10）** | ~~高~~ 低 | 中 | —— | ⭐FR-RLS-01 已完成（用户 keystore）；R8 与资源收缩已开；`RELEASE.md` §3 |
 | R3 | **真机单点依赖**（Xiaomi 13 / HyperOS 一台） | 中 | 大（通知、选图器、相机、权限四类行为只有真机给得出答案） | `adb devices` 为空 | 不用模拟器凑数（`REBUILD.md` §8 第 5 条）；真机行为结论一律写进文档（`REBUILD.md` §7 D 组）；换机时重跑 `REBUILD.md` §6 |
 | R4 | 单人维护 → 知识只在脑子里 | 中 | 大 | 同一类坑踩第二次 | 文档集 + G4 文档同步门；`REBUILD.md` §7 的坑表就是"踩过一次"的资产 |
 | R5 | AI 供应商行为漂移（模型下线、接口变更、额度归零） | 中 | 中 | 出现 `BAD_REQUEST`/`INSUFFICIENT_BALANCE` | 换厂商只改 `base_url` + `model`（FR-AI-08）；11 类失败各有中文文案（`RULES.md` §13）；留痕可查原文 |
@@ -205,11 +205,11 @@ Wheremy 是一个**单人单机**的 Android 应用：把家里东西拍一张�
 
 | 维度 | 状态 |
 |---|---|
-| 功能 | M0–M6 全部落地；`PRD.md` §3 共 **87 条 FR**：`✅` 65、`🟡` 7（AI-11 / LOC-05 / FND-07 / BAK-03 / PRM-02 / PRM-05 / TRC-05）、`⬜` 14、`⛔` 1（CFG-05）；`PRD.md` §5 待做队列 **21 条**（17 条 `⬜` + 4 条 `🟡`，另含 ⭐FR-DB-01、⭐FR-RLS-01 两条发布前必做） |
-| 测试 | 39 类 / 481 例全绿；判绿方式见 `PROCESS.md` §6 G1 |
+| 功能 | M0–M6 全部落地；`PRD.md` §3 共 **87 条 FR**：`✅` **79**、`🟡` **0**、`⬜` **7**（SRC-08 / BAK-09 / EXP-09 / PRM-06 / LOC-08 / AI-09 / AI-10，都是「大」且带触发条件的）、`⛔` 1（CFG-05）——**2026-10-12 口径**（对账脚本 `artifacts/tools/check-prd-delta.py` 零不一致） |
+| 测试 | **42 类 / 261 例全绿**（2026-10-12：本地 CI 四道门 + GitHub CI 真跑全绿）；判绿方式见 `PROCESS.md` §6 G1 |
 | 文档 | 16 份正文文档 + `README.md` + `CHANGELOG.md` + 8 张模板 |
 | 技术选型 | 数据库/偏好/后台/相机/序列化/HTTP/图片加载**已是官方或社区最佳实践**；自造集中在 DI、导航、文案资源、搜索四处，已按用户 2026-10-07 的准则列入 `TECH_STACK.md` §4 迁移队列（T1–T15，各带触发条件） |
 | 技术选型核实 | 2026-10-07 与 2026-10-08 各完成一轮（官方口径 + 上游版本实测 + 引用来源，见 `TECH_STACK.md` §8/§8.9）；**判断更正**：搜索不上 FTS、导航目标改 Navigation 3、CI 前置是 Gradle Wrapper；**新增发现**：Room 3.0.3 已 stable、Compose BOM 2026.09.00 → material3 **1.4.0**（M3 Expressive）、官方 Nav3 样板仓库 |
-| 发布 | **未就绪**：⭐FR-DB-01、⭐FR-RLS-01 未做；`RELEASE.md` §3 是就绪清单 |
+| 发布 | **本轮已具备交付条件**：⭐FR-RLS-01 已完成（用户 keystore）、**真机人工清单七条 2026-10-12 全部通过**（`RELEASE.md` §10.7）；未做的只剩**无障碍专项**（TalkBack 焦点次序走查，第 22 条）与那 7 条带触发条件的 `⬜`。`RELEASE.md` §3 是就绪清单 |
 | 本工作区的开发 | **已具备开工条件**（`PLAN.md` §1 六项判据全过）：技术起点取现行代际、先做可运行的 UI 骨架 + 设计系统，再按纵向切片推进 P0–P6；与参照实现的差异逐条记在 `DELTA.md` |
-| 下一步（建议顺序） | ① **执行 `PLAN.md` §8 的三步**（Phase 0 spike → 设计系统落地 → 采集对比基线）；② 之后按 P1–P6 推进，每阶段走 G0–G5 更新 `PLAN.md` §10 与 `DELTA.md`；③ 发布前回到 ⭐FR-DB-01 / ⭐FR-RLS-01 与 `RELEASE.md` §3 清单 |
+| 下一步（建议顺序） | ① **无障碍专项**：用户按 `templates/talkback-walkthrough.md` 走一遍（7 屏，听焦点次序）；② 若要验 **AI 预填**：设置页重填 API key 后重走验收单第 2 步；③ 之后按 `PRD.md` §5 的触发条件决定那 7 条 `⬜` 要不要开（`FR-SRC-08` 多图与 `FR-BAK-09` 加密需要用户先拍板） |
