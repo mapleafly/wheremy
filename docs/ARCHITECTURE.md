@@ -84,9 +84,9 @@ ui/  ──┐
 - `ksp { arg("room.schemaLocation", "$projectDir/schemas") }`：导出 schema JSON（`app/schemas/…/1.json` 在仓库里）。
 - `testOptions.unitTests { isIncludeAndroidResources = true; isReturnDefaultValues = true }`：
   Robolectric 跑 Compose 界面测试的前提。
-- `release { isMinifyEnabled = false }` 且**无 signingConfig**：见 `PRD.md` ⭐FR-RLS-01。
+- `release { isMinifyEnabled = true }` + `isShrinkResources = true`（keep 规则在 `proguard-rules.pro`）、签名走用户自己的 keystore（仓库外 `keystore.properties`，没有则回落到 debug 签名并打 ⚠️）：**R8 在 P6 已打开**，⭐FR-RLS-01 于 2026-10-10 由用户完成（`RELEASE.md` §3.2、`KEYSTORE.md`）。
 
-`settings.gradle.kts`（21 行）：仓库走阿里云镜像 + `RepositoriesMode.PREFER_SETTINGS`。
+`settings.gradle.kts`：仓库**只用官方源**（google / mavenCentral / gradlePluginPortal）+ `RepositoriesMode.PREFER_SETTINGS`。⚠️ 2026-10-10 更正：阿里云镜像**不再写进仓库配置**——它在 GitHub runner 上返回 502，把 CI 的插件解析搞红了（F46）；本机加速交给本机的 init 脚本。
 
 **`AndroidManifest.xml`（27 行）**：权限只有 `INTERNET` / `POST_NOTIFICATIONS` / `CAMERA`；
 `uses-feature camera.any required=false`；`allowBackup="false"`；

@@ -588,7 +588,7 @@ HTTP 状态**已经落地**：`TraceEntry` 有 `status: Int?`（`AnalysisTrace.k
 
 **NFR-06 工具链与环境**
 - Kotlin 2.2.21 / AGP 8.13.2 / Gradle 8.14.3 / compileSdk 36 / minSdk 26 / targetSdk 36 / JVM 17。
-- 版本目录 `gradle/libs.versions.toml`；仓库走阿里云镜像 + `RepositoriesMode.PREFER_SETTINGS`。
+- 版本目录 `gradle/libs.versions.toml`；仓库**只用官方源** + `RepositoriesMode.PREFER_SETTINGS`（2026-10-10 更正：阿里云镜像已从仓库配置移除，见 F46；本机加速走本机 init 脚本）。
 - 不生成 gradle wrapper（本机 version-fox 提供 gradle）。**例外**：要加 CI 时，官方写法的前提就是提交 wrapper（`TECH_STACK.md` §8.2 更正三、§4 的 T10）——届时 wrapper 只服务 CI，本机用法不变。
 
 **NFR-07 包体与依赖纪律**

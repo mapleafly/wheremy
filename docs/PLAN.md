@@ -170,7 +170,7 @@ D:\src\dsh\wheremy\
 | F1 | **Compose 1.12.1（BOM 2026.09.00）要求 `compileSdk ≥ 37`**，而参照实现的 36 不够 | `compileSdk = 37`（AGP 自动补装平台，SDK license 已接受）；targetSdk 仍 36。**这是"本实现比参照新一档"的直接证据** |
 | F2 | **Robolectric 4.17 在 JDK 17+ 需要模块开放**，否则所有 Robolectric 测试报 `Failed to interact with raw FileDescriptor internals` | `testOptions.unitTests.all { jvmArgs("--add-opens=java.base/java.lang=ALL-UNNAMED", …/java.util, …/java.io, …/jdk.internal.access) }` |
 | F3 | Compose 的 `@Composable` 函数用 PascalCase，**ktlint 的 `function-naming` 会误报**；且根 `.editorconfig` 传不进 Spotless 的临时目录 | Spotless 里用 `editorConfigOverride(mapOf("ktlint_function_naming_ignore_when_annotated_with" to "Composable"))` |
-| F4 | 本机有组织级 Gradle init 脚本（注入阿里云镜像），官方推荐的 `FAIL_ON_PROJECT_REPOS` 会**直接构建失败** | 改 `PREFER_SETTINGS`；同时把阿里云镜像**显式写进 `settings.gradle.kts`**（仓库自包含，换机/CI 自动回落官方源） |
+| F4 | 本机有组织级 Gradle init 脚本（注入阿里云镜像），官方推荐的 `FAIL_ON_PROJECT_REPOS` 会**直接构建失败** | 改 `PREFER_SETTINGS`；同时把阿里云镜像**显式写进 `settings.gradle.kts`**（仓库自包含，换机/CI 自动回落官方源）。⚠️ **2026-10-10 按 F46 撤回后半句**：镜像不该写进仓库配置（runner 上 502 → CI 红），已改回只用官方源 |
 | F5 | AGP 9 需要 Gradle ≥ 9.1，而本机 PATH 上是 8.14.3 → `NoClassDefFoundError: ProjectTypeBinding` | 用临时下载的 Gradle 9.8.1 生成 wrapper，此后一切走 `./gradlew`（这正是"提交 wrapper"的价值） |
 | F6 | `androidx.room3` **没有 `room3-ktx`**（ktx 已并入 runtime）；catalog 别名不能含 `class`（Gradle 保留字） | 依赖表已按实测调整 |
 | F7 | Compose 测试的 `createComposeRule` 已被 `androidx.compose.ui.test.junit4.v2.createComposeRule` 取代（构建给出弃用警告） | 已切到 v2（`StandardTestDispatcher` 语义），测试仍全绿 |

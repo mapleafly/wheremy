@@ -118,7 +118,7 @@
 | **T11** | 截图/UI 回归：Roborazzi | 补"UI 导航测试作为 CI 回归"这条官方要求；与现有 Robolectric + `createComposeRule` 路线同源 | 小-中：会引入 golden 文件与审批流程 | 有 CI 之后 | 用 Roborazzi（官方示例用的就是它）；**不用 Paparazzi**（stable 仅 1.3.5、2.x 长期 alpha），也不用官方 Compose screenshot testing（仍 alpha，且独立插件方式已废弃） |
 | **T12** | 一批次纯版本 bump（无 API 变更） | 止住"版本落后"：WorkManager / Coil / OkHttp / serialization / coroutines / Robolectric / Compose BOM / lifecycle / activity / exifinterface | 小：逐项见 §8.3；OkHttp 4→5 会改 MockWebServer 包名（`mockwebserver3`），单独一批做 | 想止血漂移时立即可做 | 全量回归 + G2 抽查；一次提交只升一组（`PROCESS.md` §3.6） |
 | **T13** | **构建链大版本**：AGP 8.13.2 → 9.x、Gradle 8.14.3 → 9.x、Kotlin 2.2.21 → 2.4.x、KSP 换到新编号体系 | 长期跟进官方；AGP 9 把 Kotlin 插件内置，配置面变小 | **高**：三者**必须同批**（AGP 9 内置 Kotlin、旧 DSL/`applicationVariants` 已移除、opt-out 将在 AGP 10 删除）；任何一处不配套就编不过 | 其他项稳定、CI 就绪之后（T10 先做完），且**单独一批** | 先读 AGP 9 release notes；兼容基线是 Gradle ≥ 9.1 / JDK 17 / KGP ≥ 2.2.10；`RELEASE.md` §3 的发布清单要在升级后重跑 |
-| **T14** | 性能发布配置：R8 full mode / Baseline Profiles / Macrobenchmark | 官方**强推荐**；现在 release 未混淆也无 profile | 中：混淆要 keep 规则 + 全量回归 + 真机冒烟（`RELEASE.md` §3 已写成"保持 or 打开 + 理由"） | 与 ⭐FR-RLS-01（签名包）同批做 | 先定"混淆 or 保持"并写理由，再谈 Baseline Profiles |
+| ~~**T14**~~ ✅ **已收口（2026-10-10）** | 性能发布配置：R8 full mode / Baseline Profiles / Macrobenchmark | 官方**强推荐** | —— | —— | R8 + 资源收缩已开（P6）；Baseline Profiles **评估后决定现在不做**，触发条件写在 `RELEASE.md` §10.5 |
 | **T15** | 依赖新鲜度自动化：Renovate **或** Dependabot | 止住"版本落后一年"；两者现在都原生支持 `gradle/libs.versions.toml` | 小：加一个配置文件 | T10（CI）就绪后 | **只上一个**（准则 P2 的反面：不引第二套同类工具） |
 
 **队列里每一条都要能被"拿出来单独做"**：一条件一次迭代、一次提交（`PROCESS.md` §4.1），不许"顺手一起换"。
@@ -243,7 +243,7 @@
 | DI | "Use dependency injection. **Strongly recommended**"；"**Use Hilt. Recommended.**"；判据：多屏 + ViewModel / 用 WorkManager / VM 作用域跟返回栈 | **命中前两条** → T2（Hilt 2.60.1，走 KSP）；手写 DI 也被官方允许，所以是"该做" |
 | 导航 | 纯 Compose → Navigation Compose；Nav3 已 stable | T3（目标改 Nav3） |
 | 测试 | 本地测试在开发机/服务器跑；测试金字塔含"能在 CI 当回归的 UI 导航测试"；"**Prefer fakes to mocks**" | 已经是 JVM + Robolectric（本地测试路径）；**缺 CI 与截图/导航回归**（T10/T11）。"fakes over mocks" 与本项目的手写替身（`FakeTrace` 等）方向一致 |
-| 性能 | R8 full mode 强推荐；Baseline/Startup Profiles 强推荐；Macrobenchmark | **没做**：release 现在 `isMinifyEnabled = false` 且无签名（⭐FR-RLS-01）；混淆决策在 `RELEASE.md` §3 已写成"保持 or 打开 + 理由"，Baseline Profiles 尚无条目 → 记为 T14 |
+| 性能 | R8 full mode 强推荐；Baseline/Startup Profiles 强推荐；Macrobenchmark | **R8 已做**（`isMinifyEnabled = true` + 资源收缩，P6 打开）；**Baseline Profiles 评估后决定现在不做**：R8 冷启动 218 ms / 2.62 MB，触发条件（≥400 ms / 可感卡顿 / 启动路径显著变重）见 `RELEASE.md` §10.5。T14 至此收口 |
 | 依赖新鲜度 | —（非官方项） | Renovate 与 Dependabot **现在都原生支持** `gradle/libs.versions.toml`（后者官方文档原文列出该文件）→ 二选一即可，见 T15 |
 
 ### 8.5 静态检查 / CI / 截图测试的具体选型（T9–T11 的坐标）

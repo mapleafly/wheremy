@@ -70,7 +70,7 @@ grep -ho 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' \
 
 | 步 | 判据 | 不符时先看 |
 |---|---|---|
-| 2 | `BUILD SUCCESSFUL` + APK 文件存在 | 依赖能不能下（阿里云镜像，§5.1） |
+| 2 | `BUILD SUCCESSFUL` + APK 文件存在 | 依赖能不能下（官方源，§5.1） |
 | 3 | `Success` | 设备没授权 / 被系统拦包（`REBUILD.md` §7 D4） |
 | 4 | 命令真的跑完了（有输出、耗时是分钟级） | 后台跑了？`cwd` 给了吗（`REBUILD.md` §1.1、§7 A1/A2） |
 | 5 | **本轮份数的新鲜 XML**（当前 42 份）且 `failures=0 errors=0` | 陈旧 XML 是「假绿」的头号来源（`REBUILD.md` §1.1） |
@@ -153,7 +153,7 @@ grep -ho 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' \
 
 所有版本、库坐标、插件 alias 都只在这里出现；`app/build.gradle.kts` 只写 `libs.xxx`，不写字面版本。当前 `[plugins]` 5 条 alias 全在 `app/build.gradle.kts:1-7` 用上：`android-application` / `kotlin-android` / `kotlin-compose` / `kotlin-serialization` / `ksp`（`ARCHITECTURE.md` §2）。
 
-**仓库与解析模式**（`settings.gradle.kts:1-19`）：`pluginManagement` 与 `dependencyResolutionManagement` 都走阿里云镜像（`gradle-plugin` / `google` / `public`），并设了 `RepositoriesMode.PREFER_SETTINGS`——模块里自己写的仓库会被忽略，所以**不要**在 `app/build.gradle.kts` 里写 `repositories { }`。
+**仓库与解析模式**（`settings.gradle.kts`）：`pluginManagement` 与 `dependencyResolutionManagement` **都只用官方源**（`google` / `mavenCentral` / `gradlePluginPortal`；2026-10-10 起阿里云镜像已从仓库配置里去掉，原因见 F46），并设了 `RepositoriesMode.PREFER_SETTINGS`——模块里自己写的仓库会被忽略，所以**不要**在 `app/build.gradle.kts` 里写 `repositories { }`。
 
 ### 5.2 加依赖之前必须回答的三个问题
 
@@ -170,7 +170,7 @@ grep -ho 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' \
 | `buildConfig = true` | `:37` | 备份包的 `manifest.json` 要写 App 版本（`BuildConfig.VERSION_NAME` → `AppContainer.kt:54`）；关掉它备份就写不出 `appVersion` |
 | `ksp { arg("room.schemaLocation", "$projectDir/schemas") }` | `:44` | 导出 schema JSON（仓库里有 `app/schemas/com.wheremy.app.data.db.WheremyDatabase/1.json`）——将来做真实 Migration 的基线，不导出就只剩猜 |
 | `testOptions.unitTests { isIncludeAndroidResources = true; isReturnDefaultValues = true }` | `:28-33` | Robolectric 跑 Compose 界面测试的前提；删了它，Robolectric 那一层（27 类，含全部界面测试）就集体跑不起来 |
-| `release { isMinifyEnabled = false }` 且**无 signingConfig** | `:22` | 见 `PRD.md` ⭐FR-RLS-01。**注意后果**：release 变体的签名配置是 `null`（用 `gradle :app:signingReport` 可自证），所以现在**打不出能侧载的 release 包**——开发与验收期只用 debug 包；签名是发布前的必做项（`RELEASE.md` §3） |
+| `release { isMinifyEnabled = true }` + `isShrinkResources = true`，签名走用户 keystore | `:74-88` | **R8 在 P6 已打开**（不是「未混淆」了）；签名配置读仓库外的 `keystore.properties`，没有时回落到 debug 签名并打 ⚠️。⭐FR-RLS-01 已于 2026-10-10 由用户完成：`gradle :app:signingReport` 现在是 `Config: release`（`RELEASE.md` §3.2） |
 
 另外两条容易碰坏的：`compileOptions` / `jvmTarget` 都是 **17**（`:24-27`、`:42`），别跟着本机的 JDK 21 改；CameraX 是**四个 artifact**（core / camera2 / lifecycle / view，`:61-65`），没有 `camera-compose` 也没有 `camera-video`（不录像），那句注释就是这个分工。
 

@@ -210,7 +210,7 @@
 | adb | **不在 PATH**，用 SDK 目录内的绝对路径（`…\platform-tools\adb.exe`） | 本机 |
 | 平台 | Windows 11 + PowerShell；带设备路径的 adb 参数注意引号 | 本机 |
 | 真机 | Xiaomi 13 / HyperOS，序列号 `9aa4b43e`；`adb devices` 为空时**不许用模拟器凑数** | `REBUILD.md` §8 第 5 条 |
-| 依赖源 | `settings.gradle.kts` 里显式写了阿里云镜像 + 官方源兜底；机器上那份 `init.d/init.gradle` 会注入镜像，所以开了 `RepositoriesMode.PREFER_SETTINGS` | `settings.gradle.kts`（F4） |
+| 依赖源 | `settings.gradle.kts` **只用官方源**（google / mavenCentral / gradlePluginPortal）；开了 `RepositoriesMode.PREFER_SETTINGS` 是因为机器上那份 `init.d/init.gradle` 会注入镜像。⚠️ 2026-10-10 更正：镜像**不再写进仓库配置**（runner 上 502 → CI 红，F46） | `settings.gradle.kts`（F4/F46） |
 
 ```bash
 ./gradlew.bat :app:assembleDebug              # 出 debug 包（17.4 MB）
