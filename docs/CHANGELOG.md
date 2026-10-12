@@ -29,6 +29,18 @@
 
 测试从 **42 类 / 261 例** 长到 **43 类 / 265 例**，本地 CI 四道门全绿。
 
+**⚠️ 这批在真 CI 上又红了一次（本地四道门全绿）**：报
+
+```
+ReviewAccessibilityTest > 名称框的读屏文案带必填 FAILED
+    kotlinx.coroutines.test.UncaughtExceptionsBeforeTest
+```
+
+根因是重构这条测试时把原来的 `db.close()` 弄丢了：内存库不关，它后台协程的未捕获异常会留到
+**下一条测试**才炸，报成 `UncaughtExceptionsBeforeTest`。本地单跑这一类（顺序不同）不暴露，
+**真 CI 跑整套才炸**——又一次印证"本地绿 ≠ 真 CI 绿"。改法：db 提升为测试类字段，在 `@After` 里关闭。
+（这也说明"真 CI 必须跑"不是形式主义。）
+
 **清单同步改对**（`templates/talkback-walkthrough.md`）：位置页标题改成真实的「全部位置」、
 写明「切屏后焦点在底栏是标准行为」、名称那条写明「应念出「名称，必填」」、开关那条改成「标签和开关是同一个焦点」。
 
