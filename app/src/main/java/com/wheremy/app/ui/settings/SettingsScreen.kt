@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -120,6 +121,9 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                // 键盘弹起时要能滚到正在编辑的那一格（UI.md §7 要求；官方对 targetSdk 35+ 的做法：
+                // 不靠 windowSoftInputMode，在 Compose 里消费 IME inset）。放在 verticalScroll 之前。
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(WheremySpacing.lg),
             verticalArrangement = Arrangement.spacedBy(WheremySpacing.md),

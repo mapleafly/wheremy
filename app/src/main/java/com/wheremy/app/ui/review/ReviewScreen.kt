@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -131,6 +132,11 @@ fun ReviewScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                // 键盘弹起时把可视区缩到键盘上方（官方对 targetSdk 35+ 的做法：不靠 windowSoftInputMode，
+                // 在 Compose 里消费 IME inset）。放在 verticalScroll **之前**：缩的是滚动视口，
+                // 于是 Compose 会把正在编辑的那一格自动滚进可视区。
+                // ⚠️ 没有它时：键盘只是盖在内容上，靠下的输入框会被挡住（真机验证过）。
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(WheremySpacing.lg),
             verticalArrangement = Arrangement.spacedBy(WheremySpacing.md),

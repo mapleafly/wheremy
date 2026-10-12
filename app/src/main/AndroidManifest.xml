@@ -27,10 +27,30 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Wheremy">
 
+        <!--
+            ⚠️ 这里**故意不声明 `android:windowSoftInputMode`**（原来是 `adjustResize`）。别加回来。
+
+            2026-10-12 真机走查抓到：本机（小米 13 / HyperOS / Android 16）+ **微信输入法 3.5.3**
+            下，声明 `adjustResize` 时输入框能聚焦、系统也报 `mInputShown=true`，但**键盘画不出来**
+            （`mInputMethodWindowVisibleHeight=-43`，截图里键盘完全不出现）→ 名称填不了 → 存不进去。
+
+            对照实验（同机同版本，只改这一项，都截图核对过）：
+              - 微信输入法 + adjustResize          → 键盘不显示（-43）
+              - 微信输入法 + 不声明                 → 键盘正常（864）
+              - 微信输入法 + adjustPan              → 键盘正常（864）
+              - 搜狗输入法 + adjustResize / adjustPan / 不声明 → 都正常（885）
+            即出问题的是「微信输入法 × adjustResize」这个组合。顺带一提，系统设置自己也用 adjustPan。
+
+            为什么选"不声明"而不是 `adjustPan`：本应用是 targetSdk 36（平台强制 edge-to-edge），
+            官方对 targetSdk 35+ 的建议就是**不要依赖 windowSoftInputMode 来缩放窗口**，而是在
+            Compose 里消费 IME inset——所以我们按官方做法，在需要打字的可滚动屏上加了
+            `Modifier.imePadding()`（`ReviewScreen.kt` / `SettingsScreen.kt`，放在 verticalScroll 之前）。
+            没有 imePadding 时键盘只是"盖"在内容上，靠下的输入框会被挡住（真机验证过）。
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:windowSoftInputMode="adjustResize">
+>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

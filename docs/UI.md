@@ -411,6 +411,8 @@ VM 侧另有 `DetailViewModelTest.kt:140` 断言 `deleted` 置位。
 
 ## 6. 录入 / 确认页
 
+整屏 `verticalScroll` + `imePadding`（`ReviewScreen.kt:134` 一带）——字段多、一屏装不下；`imePadding` 放在 `verticalScroll` 之前，键盘弹起时可视区缩到键盘上方，Compose 会把正在编辑的那一格自动滚进来（2026-10-12 真机验证，见 `PLAN.md` F48）。
+
 `ReviewScreen.kt:71`。这是全应用最长的一屏，也是规矩最多的一屏。
 
 ### 6.1 顶栏 🗣🔒
@@ -537,7 +539,7 @@ LaunchedEffect(state.finished) {
 
 `SettingsScreen.kt:69`，签名带 `showDebugTools: Boolean = BuildConfig.DEBUG`（🔒 `:63-66` 注释：正式包不许出现"立刻跑一次后台检查"的入口）。
 
-整屏 `verticalScroll` + `imePadding`（`:129-132`）——多了 AI 这一节之后一屏装不下，键盘弹起来也得能滚到正在编辑的那一格。三节按次序：
+整屏 `verticalScroll` + `imePadding`（`:129-132`）——多了 AI 这一节之后一屏装不下，键盘弹起来也得能滚到正在编辑的那一格。**2026-10-12 补齐**：`imePadding` 放在 `verticalScroll` 之前；此前漏了它，真机上键盘会把靠下的输入框盖住（见 `PLAN.md` F48）。三节按次序：
 
 **这一屏自己的四格状态**（`:74-77`），只有一格必须存：
 
