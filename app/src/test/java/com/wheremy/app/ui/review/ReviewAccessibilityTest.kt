@@ -64,7 +64,12 @@ class ReviewAccessibilityTest {
     @After
     fun tearDownDispatcher() {
         Dispatchers.resetMain()
+        // ⚠️ 内存库必须关：不关的话它的后台协程会把未捕获异常留到**下一条测试**里，
+        // 报成 `UncaughtExceptionsBeforeTest`（真 CI 抓到的：本地单跑这一类不暴露）。
+        if (::db.isInitialized) db.close()
     }
+
+    private lateinit var db: WheremyDatabase
 
     @get:Rule
     val tmp = TemporaryFolder()
@@ -103,7 +108,7 @@ class ReviewAccessibilityTest {
     /** 建好依赖、把确认页挂上去，返回它的 VM（`state.current` 不为空 = 页已就绪）。 */
     private fun renderReview(): ReviewViewModel {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val db = Room.inMemoryDatabaseBuilder(context, WheremyDatabase::class.java)
+        db = Room.inMemoryDatabaseBuilder(context, WheremyDatabase::class.java)
             .allowMainThreadQueries()
             .build()
         val store = PhotoStore(File(tmp.root, "photos"))
