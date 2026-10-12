@@ -2,8 +2,12 @@ package com.wheremy.app.ui.review
 
 import android.content.Context
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -103,6 +107,26 @@ class ReviewAccessibilityTest {
         compose.onNodeWithTag("field_name")
             .assert(hasContentDescription("名称，必填"))
             .assert(hasSetTextAction())
+    }
+
+    /**
+     * 芯片类控件的审计（2026-10-12 全应用审计）：标签与控件要在**同一个**无障碍节点上。
+     *
+     * - 分类/季节是 `FilterChip(selected = …)`，材料组件自带选中语义 → 读屏会念「已选中」；
+     * - 标签是 `AssistChip`（点一下删掉这个标签）→ 它是一颗**按钮**，标签文字与点击在同一节点，
+     *   该做什么由它上面那行「标签（点一下删除）」交代。
+     */
+    @Test
+    fun `芯片的标签与状态在同一个无障碍节点上`() {
+        val vm = renderReview()
+
+        compose.onNode(hasText("衣物") and isSelectable()).assertIsNotSelected()
+
+        vm.toggleTag("审计标签")
+        compose.waitUntil(timeoutMillis = 5_000) {
+            vm.state.value.current?.draft?.tags?.contains("审计标签") == true
+        }
+        compose.onNode(hasText("审计标签") and hasClickAction()).assertExists()
     }
 
     /** 建好依赖、把确认页挂上去，返回它的 VM（`state.current` 不为空 = 页已就绪）。 */

@@ -4,8 +4,10 @@ import android.content.Context
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.room3.Room
@@ -86,6 +88,17 @@ class SettingsAccessibilityTest {
 
         compose.onAllNodes(hasText(AUTO_EXPORT_LABEL)).assertCountEquals(1)
         compose.onAllNodes(hasText(VISION_LABEL)).assertCountEquals(1)
+    }
+
+    /**
+     * 提前天数的预设（「当天 / 1 天 / 3 天 / 7 天」）是 `FilterChip(selected = …)`，
+     * 材料组件自带选中语义 → 读屏会念「已选中」。默认提前 3 天，所以「3 天」应是选中态。
+     */
+    @Test
+    fun `提前天数的预设芯片带选中状态`() {
+        renderSettings()
+
+        compose.onNode(hasText("3 天") and isSelectable()).assertIsSelected()
     }
 
     /** 建好依赖、把设置页挂上去。 */

@@ -1,6 +1,10 @@
 package com.wheremy.app.ui.gallery
 
 import android.content.Context
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.room3.Room
@@ -36,6 +40,9 @@ import org.robolectric.annotation.GraphicsMode
  *
  * 为什么单给照片墙开一条：它是用得最多的一屏，也是唯一"格子密、可点区域多"的一屏——
  * 触摸目标尺寸与可读名字这两类问题最容易在这里冒出来。取景屏那条在 `AccessibilityScanTest`。
+ *
+ * 后面那条「开关类控件」是 2026-10-12 的全应用审计（`PLAN.md` F50 的延伸）：
+ * 用户报设置页开关与标签分家之后，把所有**可切换类**控件都按读屏那棵树核了一遍。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -56,15 +63,51 @@ class GalleryAccessibilityTest {
     @After
     fun tearDownDispatcher() {
         Dispatchers.resetMain()
+        // 内存库必须关：不关的话它的后台协程会把未捕获异常留到下一条测试里
+        // （报成 UncaughtExceptionsBeforeTest，真 CI 抓到过）
+        if (::db.isInitialized) db.close()
     }
+
+    private lateinit var db: WheremyDatabase
 
     @get:Rule
     val tmp = TemporaryFolder()
 
     @Test
     fun `照片墙有物品时也过 ATF 的 Error 档`() {
+        renderWall()
+
+        compose.onRoot().checkRoboAccessibility(
+            RoborazziATFAccessibilityCheckOptions(
+                checker = RoborazziATFAccessibilityChecker(),
+                failureLevel = RoborazziATFAccessibilityChecker.CheckLevel.Error,
+            ),
+        )
+    }
+
+    /**
+     * 芯片类控件的标签与状态都在**同一个**节点上（读屏那棵树）。
+     *
+     * 走查发现设置页的 `Switch` 与标签分家之后，把所有可切换控件都核了一遍：
+     * - 「只看待归类」是 `AssistChip`（`selected` 语义它不提供），所以**状态写在文案里**
+     *   （「只看待归类」/「只看待归类 · 开」）——这条断言就是钉住"文字与点击在同一个节点"；
+     * - 分类芯片是 `FilterChip(selected = ...)`，**材料组件自带选中语义**，读屏会念"已选中"。
+     */
+    @Test
+    fun `芯片的标签与状态在同一个无障碍节点上`() {
+        renderWall()
+
+        // 只看待归类：关着的时候文案就是「只看待归类」，整颗芯片是一个可点节点
+        compose.onNode(hasText("只看待归类") and hasClickAction()).assertExists()
+
+        // 分类芯片：可选中，且暴露"未选中"状态（FilterChip 自带）
+        compose.onNode(hasText("衣物") and isSelectable()).assertIsNotSelected()
+    }
+
+    /** 建库、塞一件物品、把照片墙挂上去。 */
+    private fun renderWall() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val db = Room.inMemoryDatabaseBuilder(context, WheremyDatabase::class.java)
+        db = Room.inMemoryDatabaseBuilder(context, WheremyDatabase::class.java)
             .allowMainThreadQueries()
             .build()
         val store = PhotoStore(java.io.File(tmp.root, "photos"))
@@ -88,14 +131,5 @@ class GalleryAccessibilityTest {
             }
         }
         compose.waitUntil(timeoutMillis = 20_000) { vm.state.value.rows.isNotEmpty() }
-
-        compose.onRoot().checkRoboAccessibility(
-            RoborazziATFAccessibilityCheckOptions(
-                checker = RoborazziATFAccessibilityChecker(),
-                failureLevel = RoborazziATFAccessibilityChecker.CheckLevel.Error,
-            ),
-        )
-
-        db.close()
     }
 }
