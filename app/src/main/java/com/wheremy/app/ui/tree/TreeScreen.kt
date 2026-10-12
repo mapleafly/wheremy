@@ -44,6 +44,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -80,16 +83,22 @@ fun TreeScreen(
         }
     }
 
+    // 标题只写一份：TopAppBar 与读屏的 paneTitle 共用（F50）。
+    // ⚠️ 这一屏的标题**不是**底栏那个「位置」，而是「全部位置」或当前面包屑路径。
+    val title = if (state.breadcrumb.isEmpty()) {
+        "全部位置"
+    } else {
+        state.breadcrumb.joinToString(" / ")
+    }
+
     Scaffold(
+        modifier = Modifier.semantics { paneTitle = title },
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        text = if (state.breadcrumb.isEmpty()) {
-                            "全部位置"
-                        } else {
-                            state.breadcrumb.joinToString(" / ")
-                        },
+                        text = title,
+                        modifier = Modifier.semantics { heading() },
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )

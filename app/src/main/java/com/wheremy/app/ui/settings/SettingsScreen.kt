@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -40,6 +41,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -113,8 +118,12 @@ fun SettingsScreen(
         }
     }
 
+    // 标题只写一份：TopAppBar 与读屏的 paneTitle 共用（F50）
+    val title = "设置"
+
     Scaffold(
-        topBar = { TopAppBar(title = { Text("设置") }) },
+        modifier = Modifier.semantics { paneTitle = title },
+        topBar = { TopAppBar(title = { Text(title, modifier = Modifier.semantics { heading() }) }) },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(
@@ -203,13 +212,25 @@ fun SettingsScreen(
                     modifier = Modifier.padding(WheremySpacing.md),
                     verticalArrangement = Arrangement.spacedBy(WheremySpacing.sm),
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // 整行做成**一个**可切换项（官方做法，`role = Role.Switch`）：读屏把它当单个焦点，
+                            // 念「标签 + 开关 + 开/关」；`Switch` 自己传 `null`，不再另成一个只会念"开/关"的焦点。
+                            // 2026-10-12 真机走查发现（F50）：以前标签与开关是两个焦点，只听到"开/关"不知道是哪个开关。
+                            .toggleable(
+                                value = state.visionEnabled,
+                                role = Role.Switch,
+                                onValueChange = vm::setVisionEnabled,
+                            ),
+                    ) {
                         Text(
                             "选完照片让 AI 先把名称、类别、季节填一遍，你再改",
                             modifier = Modifier.weight(1f),
                             style = MaterialTheme.typography.bodyMedium,
                         )
-                        Switch(checked = state.visionEnabled, onCheckedChange = vm::setVisionEnabled)
+                        Switch(checked = state.visionEnabled, onCheckedChange = null)
                     }
                     Text(
                         state.visionStateLine,
@@ -316,13 +337,18 @@ fun SettingsScreen(
                     HorizontalDivider()
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // 同上：整行一个焦点，念「每天自动导出一份 + 开关 + 开/关」。
+                            // 顺手把版式统一成「标签在左、开关在右」——原来这颗开关在文字左边，两处不一致。
+                            .toggleable(
+                                value = state.autoExportEnabled,
+                                role = Role.Switch,
+                                onValueChange = vm::setAutoExportEnabled,
+                            ),
                     ) {
-                        Switch(
-                            checked = state.autoExportEnabled,
-                            onCheckedChange = vm::setAutoExportEnabled,
-                        )
-                        Text("每天自动导出一份")
+                        Text("每天自动导出一份", modifier = Modifier.weight(1f))
+                        Switch(checked = state.autoExportEnabled, onCheckedChange = null)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
                         OutlinedButton(onClick = { autoExportDir.launch(null) }) { Text("选择保存位置") }

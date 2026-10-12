@@ -1,7 +1,11 @@
 package com.wheremy.app.ui.review
 
 import android.content.Context
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
@@ -67,6 +71,37 @@ class ReviewAccessibilityTest {
 
     @Test
     fun `确认页过 ATF 的 Error 档`() {
+        renderReview()
+
+        compose.onRoot().checkRoboAccessibility(
+            RoborazziATFAccessibilityCheckOptions(
+                checker = RoborazziATFAccessibilityChecker(),
+                failureLevel = RoborazziATFAccessibilityChecker.CheckLevel.Error,
+            ),
+        )
+    }
+
+    /**
+     * 名称框的读屏文案要带「必填」。
+     *
+     * 为什么单写一条：视觉上那一格是「名称 *」，**星号读屏读不出来**，
+     * 于是读屏用户不知道这一格必填（2026-10-12 真机走查发现，`PLAN.md` F50）。
+     * 现在靠 `contentDescription = "名称，必填"` 让读屏念出来，视觉不变。
+     *
+     * 断言用 `hasContentDescription` + `hasSetTextAction`：前者证明"念得对"，
+     * 后者证明这仍然是个能打字的输入框（别把语义加坏了）。
+     */
+    @Test
+    fun `名称框的读屏文案带必填`() {
+        renderReview()
+
+        compose.onNodeWithTag("field_name")
+            .assert(hasContentDescription("名称，必填"))
+            .assert(hasSetTextAction())
+    }
+
+    /** 建好依赖、把确认页挂上去，返回它的 VM（`state.current` 不为空 = 页已就绪）。 */
+    private fun renderReview(): ReviewViewModel {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val db = Room.inMemoryDatabaseBuilder(context, WheremyDatabase::class.java)
             .allowMainThreadQueries()
@@ -82,7 +117,7 @@ class ReviewAccessibilityTest {
             items,
             locations,
             flow,
-            // 分析器配置给 null：这一条只扫界面，不发请求
+            // 分析器配置给 null：这一屏的测试只扫界面、不发请求
             ApiPhotoAnalyzer({ null }, AnalysisTrace(File(tmp.root, "ai-trace"))),
             settings,
         )
@@ -99,14 +134,6 @@ class ReviewAccessibilityTest {
             }
         }
         compose.waitUntil(timeoutMillis = 20_000) { vm.state.value.current != null }
-
-        compose.onRoot().checkRoboAccessibility(
-            RoborazziATFAccessibilityCheckOptions(
-                checker = RoborazziATFAccessibilityChecker(),
-                failureLevel = RoborazziATFAccessibilityChecker.CheckLevel.Error,
-            ),
-        )
-
-        db.close()
+        return vm
     }
 }

@@ -53,6 +53,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -101,11 +104,15 @@ fun GalleryScreen(
 
     val snackbar = remember { SnackbarHostState() }
 
+    // 标题只写一份：TopAppBar 与读屏的 paneTitle 共用（F50）
+    val title = if (inboxMode) "待归类" else "照片墙"
+
     Scaffold(
+        modifier = Modifier.semantics { paneTitle = title },
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text(if (inboxMode) "待归类" else "照片墙") },
+                title = { Text(title, modifier = Modifier.semantics { heading() }) },
                 actions = {
                     if (!inboxMode) {
                         AssistChip(

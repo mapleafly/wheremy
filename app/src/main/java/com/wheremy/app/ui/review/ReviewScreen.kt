@@ -48,6 +48,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -104,10 +108,14 @@ fun ReviewScreen(
 
     val cur = state.current
 
+    // 标题只写一份：TopAppBar 与读屏的 paneTitle 共用（F50）
+    val title = "确认物品信息"
+
     Scaffold(
+        modifier = Modifier.semantics { paneTitle = title },
         topBar = {
             TopAppBar(
-                title = { Text("确认物品信息") },
+                title = { Text(title, modifier = Modifier.semantics { heading() }) },
                 navigationIcon = {
                     IconButton(onClick = vm::requestExit) {
                         Icon(Icons.Filled.Close, contentDescription = "关闭")
@@ -187,6 +195,9 @@ fun ReviewScreen(
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
+                    // 视觉上仍是「名称 *」，但读屏念「名称，必填」——星号读屏读不出来
+                    // （2026-10-12 真机走查发现：说好的"必填"没被念出来，F50）
+                    .semantics { contentDescription = "名称，必填" }
                     .testTag("field_name"),
             )
 

@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-10-12 · TalkBack 走查第二轮：改掉开关／必填／切屏三处（F50）
+
+用户按 `templates/talkback-walkthrough.md` 走第二轮，报了三条，都成立（其中第三条是我们清单的预期写错了）：
+
+| 反馈 | 结论 | 改法 |
+|---|---|---|
+| 设置页开关与标签是**两个**焦点，且有时标签在前、有时在后，「读到开关不知道是哪个」 | 真问题 | 按官方模式把**整行**做成一个可切换项：`Modifier.toggleable(role = Role.Switch)` + `Switch(onCheckedChange = null)`；顺手统一成「标签在左、开关在右」 |
+| 确认页「名称」**没念出「必填」** | 真问题 | 视觉仍是「名称 *」，加 `semantics { contentDescription = 名称，必填 }`；星号本来就读不出来 |
+| 双击底栏「位置」进页后，焦点没移到标题 | 清单预期错了 | 焦点停在底栏标签是 Android 对底部导航的**标准行为**；改法不是去抢焦点，而是让读屏知道「在哪一屏」：各屏标题加 `heading()`、屏根加 `paneTitle` |
+
+**过程中的一个纠正**：先用 `announceForAccessibility` 播报标题，编译器指出它**在 Android 16 已弃用**——
+官方弃用说明写着「无障碍服务**可能直接忽略**这类播报事件，应当改用**语义描述界面**」，
+所以换成 `paneTitle` 语义（非弃用，且是专为「窗格／屏幕」设计的）。
+
+**验证方式也纠正了一次**：一开始用 `adb shell uiautomator dump` 看开关节点，看到「可勾选但无文字」
+就以为没修好——其实 `uiautomator dump` 看的是**原始视图树**，读屏读的是**合并后的语义树**，两者不是一棵树。
+改用 Compose 测试断言（`hasText(标签) and isToggleable()` 命中的正是读屏会念的那一个节点），
+并固化成 **CI 回归测试**：
+
+- 新增 `SettingsAccessibilityTest`（3 条）：两个开关各自「标签与开关是同一个节点」、标签在语义树里只出现一次；
+- `ReviewAccessibilityTest` 加 1 条：名称框的 `contentDescription` 是「名称，必填」**且**仍是可输入框。
+
+测试从 **42 类 / 261 例** 长到 **43 类 / 265 例**，本地 CI 四道门全绿。
+
+**清单同步改对**（`templates/talkback-walkthrough.md`）：位置页标题改成真实的「全部位置」、
+写明「切屏后焦点在底栏是标准行为」、名称那条写明「应念出「名称，必填」」、开关那条改成「标签和开关是同一个焦点」。
+
+---
+
 ## 2026-10-12 · 修掉 TalkBack 走查单里写错的系统路径（F49，真机逐屏核过）
 
 **用户反馈**：按 `docs/templates/talkback-walkthrough.md` 去找 TalkBack，**完全找不到**。
