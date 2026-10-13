@@ -278,6 +278,18 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 | 被覆盖导入覆盖掉的数据 | ❌ 不能 | 只能拿那个 zip 重新导入 | **动手前导出过** |
 | API key | 不适用（它是配置，不是数据） | 换机前在旧机上清空再重装（`SettingsScreen.kt:257-258` 🗣） | 得先知道旧机上填的是什么 |
 
+### 7.1.1 本次（0.1.0）的具体回滚预案
+
+> §9 第 26 条要的就是这一小节：**装回哪个包、要不要先导出、谁知道 keystore 在哪**。
+
+| 问题 | 答案 |
+|---|---|
+| 装回哪个包 | **`artifacts/release/0.1.0/wheremy-0.1.0-release.apk`**（2,746,725 字节 / `05d0ebd1…`，`SHA256SUMS.txt` 里也有）——**它就是验收通过的那一版** |
+| 要不要先导出 | **要**。任何写库或换包动作之前先在设置页导出一份，并**别改名、别移动**那个 zip（§7.2 的 P0 第一步就是这个）；导出回执里的三个数与「照片墙上看到的」对不上时先停下 |
+| 谁知道 keystore 在哪 | 位置记在 **§3.2**（`D:\keys\wheremy-release.jks`，别名 `wheremy-release`）；**口令只在用户自己的密码管理器里**，仓库与文档里一个字都没有（§3.2 的硬规矩） |
+| 首版特殊在哪 | 0.1.0 是**第一版**，没有「更旧的正式版」可退。所以这里的「回滚」= **重装同一个包** + 用最新导出的 zip「覆盖导入」把库重建回导出那一刻 |
+| 什么退不回来 | 已经升过 schema 的库（首版还没升过，但规则先立着）：装回旧版救不了，只能**前滚**（§5.3） |
+
 ### 7.2 事故分级与处置动作
 
 | 级 | 什么算（判据以 `PROCESS.md` §7.2 为准） | 第一步 | 第二步 |
@@ -394,10 +406,10 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 
 **发布与跟踪**
 
-26. [ ] 回滚预案写下来：装回哪个包、要不要先导出、谁知道 keystore 在哪（§7.1）。
+26. [x] 回滚预案写下来：装回哪个包、要不要先导出、谁知道 keystore 在哪（§7.1）。✅ **2026-10-13 已写成 §7.1.1**（表格式，四问四答 + 首版特殊之处）。
 27. [ ] 签收：§3 七项 + G0–G5 六门，每格有名字（§4）。
-28. [ ] 归档：APK + 哈希 + keystore **位置**（只记位置，绝不记口令）。
-29. [ ] 发布后 24 小时观察项定下来：能不能打开、录一条、搜一次、导出一次、到期提醒那天有没有响（§8.4）。
+28. [x] 归档：APK + 哈希 + keystore **位置**（只记位置，绝不记口令）。✅ **2026-10-13 已归档到 `artifacts/release/0.1.0/`**（验收包 + `SHA256SUMS.txt` + README；不进 git），哈希与签名证据在 §10.1，keystore 位置在 §3.2。
+29. [x] 发布后 24 小时观察项定下来：能不能打开、录一条、搜一次、导出一次、到期提醒那天有没有响。✅ **2026-10-13 定下**：条目就在 `templates/release-checklist.md` **§6**（原先这里指向 §8.4 是**写错了**，§8.4 讲的是留痕与 debug 区，与观察项无关，已改）。
 30. [ ] 24 小时内用户回的原话里出现异常 → 立刻开 `templates/defect-report.md`，按 §7.2 定级。
 
 ---
@@ -410,6 +422,8 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 > ⚠️ **后续更新（2026-10-10）**：这一节是 **2026-10-09 当时**的签收快照，**内容按当时的事实保留、不回改**。
 > 其中「⭐FR-RLS-01（release 签名）未完成」这一条**后来已由用户完成**（见 §3.2 与 `KEYSTORE.md`），
 > 所以本节表格里凡写「调试签名」的地方都只代表 10-09 那天；**看当前状态请以 §3.2 与 `docs/CHANGELOG.md` 为准**。
+>
+> ⚠️ **后续更新（2026-10-13）**：本节表格里那两个 APK 哈希同样是 **10-09 那天**的构建。**当前发布物、归档位置、签名证书指纹与「归档这件事的三个坑」见 §10.10**。
 
 ### 10.1 发布物
 
@@ -553,7 +567,7 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 **环境快照**：`com.wheremy.app` release 包，versionName `0.1.0`，**2.62 MB**，
 SHA-256 `05D0EBD179B995570486C1D457F69CFBF8B0F21FF5B44AE2951BFDAC1743703E`，
 用**用户自己的 keystore** 签名（`apksigner` 证书摘要 `8118b97d…`），装于 **2026-10-13 11:06**；
-走查所用提交 = `3ae596a`。
+走查所用包由提交 **`75e7c54`** 构建（**依据**：APK 内 `META-INF/version-control-info.textproto` 写着 `revision: "75e7c541e36f168d200079794f9d834eee6464bc"`——不是凭记忆填的；原先本行写 `3ae596a` 是错的，已改）。`75e7c54` 与随后的 `3ae596a`/HEAD 在 `app/src/main` 上**零差异**（后面几个提交只有文档与测试），所以走查看到的界面与当前 HEAD 一致。
 
 **两轮过程**（第一轮抓出的问题都已修并复验）：
 
@@ -606,6 +620,28 @@ SHA-256 `05D0EBD179B995570486C1D457F69CFBF8B0F21FF5B44AE2951BFDAC1743703E`，
 **可以当作"给别人用的正式包"**：⭐FR-RLS-01 已由用户完成——用户自己生成了 keystore（`D:\keys\wheremy-release.jks`，别名 `wheremy-release`）并放好 `keystore.properties`，release 包已用它签名、`apksigner` 校验通过（`Config: release`）、真机安装为正式包。口令始终在用户手里，文档只记位置不记口令（`KEYSTORE.md` §12）。
 
 ---
+
+### 10.10 当前发布物与归档 —— 2026-10-13
+
+> §10.1 是 10-09 的签收快照（按当时的哈希保留），这一节才是**当前**该看的那一份。
+
+| 项 | 值 |
+|---|---|
+| 归档位置 | **`artifacts/release/0.1.0/`**：`wheremy-0.1.0-release.apk` + `SHA256SUMS.txt` + `README.md`。**不进 git**（2.6 MB 二进制没必要进仓库）；哈希与证据在本表与 §10.7 |
+| release APK | `wheremy-0.1.0-release.apk`，**2,746,725 字节**，SHA-256 `05D0EBD179B995570486C1D457F69CFBF8B0F21FF5B44AE2951BFDAC1743703E` —— **这就是真机验收与 TalkBack 走查用的那个包**，由提交 `75e7c54` 构建，2026-10-13 从设备上取回 |
+| debug APK | `app-debug.apk`，17,623,205 字节，SHA-256 `7FEE258D3A6A8AE0AB7F932806EFD7925CFFEC954696476A203D0FDB0D4637FE`（仅本机构建产物，不归档） |
+| 签名 | ✅ **用户自己的 keystore**（⭐FR-RLS-01 已完成，2026-10-10；见 §3.2 与 `KEYSTORE.md`）。`apksigner verify --print-certs`：DN `CN=Wheremy, OU=Personal, O=Wheremy, L=Beijing, ST=Beijing, C=CN`，证书 SHA-256 `8118b97d588e43c91a77540154fda366749e0111f1bafd2765ee7a47676b8369`；`apksigner verify` 无输出 = 通过 |
+| keystore **位置** | §3.2（`D:\keys\wheremy-release.jks`，别名 `wheremy-release`）——**只记位置，口令只在用户自己的密码管理器里** |
+
+**归档这件事踩到的坑（写下来，别让下一个人再踩）**：
+
+1. **APK 不是字节可复现的**：同一份代码两次构建，哈希不同（这次两次构建**大小相同、哈希不同**；
+   150 个条目里 **149 个逐字节一致**，唯一不同的是 AGP 写的 `META-INF/version-control-info.textproto`——
+   它记的是构建时的 git revision）。所以**「归档的包」必须就是「验收的包」**，不能验收完再重新构建一个来归档。
+2. **归档要在验收之后立刻做**：这次差点错过——验收包被后续的本地 CI 构建覆盖了，
+   最后是**从设备上把装着的那个 APK 拉回来**才拿到（`adb shell pm path com.wheremy.app` → 去掉 `package:` 前缀 → `adb pull`）。
+3. **提交号别凭记忆填**：APK 里那个 `version-control-info.textproto` 写着真实 revision，是最可靠的依据——
+   这次就靠它发现 §10.7 原先记的提交号写错了（已改）。
 
 ## 附：写作时发现的差异（2026-10-07 已全部处理）
 
