@@ -215,7 +215,7 @@ reviewOpen && hasDraft     → replacePhoto(bytes)（:137）：同一 itemId，�
 `GalleryScreen.kt:81-91`：
 
 - 标题：`if (vm.inboxMode) "待归类" else "照片墙"`（`:82`）
-- actions：只在**非** inbox 模式给一颗「只看待归类」芯片（`:121-125`）。待归类页自己不再给这颗（它是这一页的定义，见 `RULES.md` §1.1）。**2026-10-13 调整**：这颗芯片从 `AssistChip` 换成 `FilterChip(selected = state.filters.onlyInbox)` —— 它是**开关行为**，`FilterChip` 自带 `selected` 语义（读屏念「只看待归类，已选中」），文案不再随状态变（原先靠「只看待归类 · 开」这种改文案的写法），也和这一屏其余筛选芯片同一种控件。两种状态的截图基线见 `app/src/test/screenshots/gallery-wall.png` 与 `gallery-wall-only-inbox.png`。
+- actions：只在**非** inbox 模式给一颗「只看待归类」芯片（`:121-125`）。待归类页自己不再给这颗（它是这一页的定义，见 `RULES.md` §1.1）。**2026-10-13 调整**：这颗芯片从 `AssistChip` 换成 `FilterChip(selected = state.filters.onlyInbox)` —— 它是**开关行为**，`FilterChip` 自带 `selected` 语义（读屏念「只看待归类，已选中」），文案不再随状态变（原先靠「只看待归类 · 开」这种改文案的写法），也和这一屏其余筛选芯片同一种控件。**它的行为由语义断言钉住**（`GalleryAccessibilityTest` 的「芯片的标签与状态在同一个无障碍节点上」）；照片墙本身**没有**截图基线——试过，但本机（Windows）录的图在 Linux 真 CI 上像素不一致，撤了（见 `CHANGELOG.md` 2026-10-13 那节）。
 
 ### 3.2 搜索框 🗣
 
