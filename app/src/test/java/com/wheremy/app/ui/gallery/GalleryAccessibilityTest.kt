@@ -2,11 +2,12 @@ package com.wheremy.app.ui.gallery
 
 import android.content.Context
 import androidx.compose.ui.test.assertIsNotSelected
-import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.RoborazziATFAccessibilityCheckOptions
@@ -88,19 +89,21 @@ class GalleryAccessibilityTest {
     /**
      * 芯片类控件的标签与状态都在**同一个**节点上（读屏那棵树）。
      *
-     * 走查发现设置页的 `Switch` 与标签分家之后，把所有可切换控件都核了一遍：
-     * - 「只看待归类」是 `AssistChip`（`selected` 语义它不提供），所以**状态写在文案里**
-     *   （「只看待归类」/「只看待归类 · 开」）——这条断言就是钉住"文字与点击在同一个节点"；
-     * - 分类芯片是 `FilterChip(selected = ...)`，**材料组件自带选中语义**，读屏会念"已选中"。
+     * 2026-10-13 起「只看待归类」也换成了 `FilterChip`：它是**开关行为**，材料组件自带 `selected` 语义，
+     * 读屏念「只看待归类，已选中」——不用再靠改文案（原来是 `只看待归类 · 开`）来表达状态。
      */
     @Test
     fun `芯片的标签与状态在同一个无障碍节点上`() {
         renderWall()
 
-        // 只看待归类：关着的时候文案就是「只看待归类」，整颗芯片是一个可点节点
-        compose.onNode(hasText("只看待归类") and hasClickAction()).assertExists()
+        // 只看待归类：可选中 → 点一下变「已选中」，而且**文案不变**
+        compose.onNode(hasText("只看待归类") and isSelectable())
+            .assertIsNotSelected()
+            .performClick()
+        compose.onNode(hasText("只看待归类") and isSelectable())
+            .assertIsSelected()
 
-        // 分类芯片：可选中，且暴露"未选中"状态（FilterChip 自带）
+        // 分类芯片：同一个模式（未选中起步）
         compose.onNode(hasText("衣物") and isSelectable()).assertIsNotSelected()
     }
 

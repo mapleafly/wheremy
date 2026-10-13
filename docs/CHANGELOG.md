@@ -54,6 +54,8 @@ ReviewAccessibilityTest > 名称框的读屏文案带必填 FAILED
 | `AssistChip`（标签） | 确认页的「标签（点一下删除）」 | ✅ **是按钮不是开关**：点一下删掉该标签，文字与点击同节点；该做什么由上方那行标题交代 |
 | `Checkbox` / `RadioButton` / `selectable` | **全应用没有** | —— |
 
+**改动（用户批准后）**：「只看待归类」已从 `AssistChip` 换成 `FilterChip(selected = …)`（2026-10-13）——读屏改念「只看待归类，已选中」，文案不再随状态变，且与其余 17 颗筛选芯片同一种控件。顺带补了**照片墙的截图基线**（原先最常用的一屏反而没有基线）：`gallery-wall.png`（关）与 `gallery-wall-only-inbox.png`（开），并新增 `GalleryScreenshotTest` 钉住这两种状态。
+
 **结论**：除设置页那两处开关外，**没有第二处"控件与标签分家"**；其余可切换控件要么是自带选中语义的
 `FilterChip`，要么是文案里带状态、文字与点击同节点的芯片。
 

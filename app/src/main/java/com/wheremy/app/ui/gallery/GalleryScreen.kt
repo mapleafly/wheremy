@@ -27,7 +27,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -115,9 +114,14 @@ fun GalleryScreen(
                 title = { Text(title, modifier = Modifier.semantics { heading() }) },
                 actions = {
                     if (!inboxMode) {
-                        AssistChip(
+                        // 用 FilterChip 而不是 AssistChip（2026-10-13 改）：
+                        // 它是**开关行为**，FilterChip 自带 `selected` 语义 → 读屏念「只看待归类，已选中」，
+                        // 文案不用再跟着状态变（原来是「只看待归类」/「只看待归类 · 开」这种改文案的土办法），
+                        // 也和这一屏另外 12 颗筛选芯片用同一种控件了。见 `PLAN.md` F50 与 CHANGELOG 的审计那节。
+                        FilterChip(
+                            selected = state.filters.onlyInbox,
                             onClick = vm::toggleOnlyInbox,
-                            label = { Text(if (state.filters.onlyInbox) "只看待归类 · 开" else "只看待归类") },
+                            label = { Text("只看待归类") },
                         )
                     }
                 },
