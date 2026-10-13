@@ -375,7 +375,7 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 **构建与判绿**
 
 8. [ ] 前台跑 `gradle :app:testDebugUnitTest`，拿到 `BUILD SUCCESSFUL`（§6.1）。
-9. [ ] 数 XML：`app/build/test-results/testDebugUnitTest/*.xml` **42 份**，mtime 全部晚于本轮起跑时刻（G1）。（也可直接 `pwsh -File artifacts/tools/ci-local.ps1 -Cold`：它会替你把四道门跑完并报测试合计。）
+9. [ ] 数 XML：`app/build/test-results/testDebugUnitTest/*.xml` **47 份**，mtime 全部晚于本轮起跑时刻（G1）。（也可直接 `pwsh -File artifacts/tools/ci-local.ps1 -Cold`：它会替你把四道门跑完并报测试合计。）
 10. [x] **CI 首次真跑** ✅ **2026-10-10 已完成**：私人仓库 `mapleafly/wheremy`，run [`38056478443`](https://github.com/mapleafly/wheremy/actions/runs/38056478443)，8m32s，四道门全 success。（首跑抓出三处问题，见 `PLAN.md` §3.3 第 9 步与 F46/F47。）以下为当时的操作步骤，换远端时重做——
     ```
     # 1) 在 GitHub 上建一个空仓库（不要勾 README/.gitignore）
@@ -386,9 +386,9 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
     ```
     跑通之后把结论记进 `PLAN.md` §3.3 的 CI 行（把「仍未跑过」划掉、写上日期与 run 链接）。
     本地等价验证见 `PLAN.md` §3.3 的说明与 `artifacts/tools/ci-local.ps1`。
-11. [ ] 自己数出 `tests=261 failures=0 errors=0`——**不认 exit code**（G1）。（数字随批次增长，当前 42 类 / 261 例，2026-10-10；`pwsh -File artifacts/tools/ci-local.ps1 -Cold` 会替你跑完四道门并报合计。）
+11. [ ] 自己数出 `tests=300 failures=0 errors=0`——**不认 exit code**（G1）。（数字随批次增长，当前 47 类 / 300 例，2026-10-14；`pwsh -File artifacts/tools/ci-local.ps1 -Cold` 会替你跑完四道门并报合计。）
 12. [ ] 覆盖对账正向：`PRD.md` §7 每行都能落到真实存在的测试类，`@Test` 数与表一致（G3）。
-13. [ ] 覆盖对账反向：**42 个类 / 261 例**（G3；数字随批次增长）。
+13. [ ] 覆盖对账反向：**47 个类 / 300 例**（G3；数字随批次增长）。
 14. [ ] 变异验牙：本批每一处改动都做过"改坏它 → 期望那条红"；无牙的补或删（G2）。
 15. [ ] `gradle :app:assembleDebug`，确认 `app/build/outputs/apk/debug/app-debug.apk` 的 mtime 是本轮的（G0）。
 16. [ ] 记下 APK 的 SHA-256（§8.2）。
@@ -648,14 +648,14 @@ SHA-256 `05D0EBD179B995570486C1D457F69CFBF8B0F21FF5B44AE2951BFDAC1743703E`，
 
 ---
 
-### 10.10 当前发布物与归档 —— 2026-10-13
+### 10.10 当前发布物与归档 —— 2026-10-13（APK 于 2026-10-14 重建）
 
 > §10.1 是 10-09 的签收快照（按当时的哈希保留），这一节才是**当前**该看的那一份。
 
 | 项 | 值 |
 |---|---|
 | 归档位置 | **`artifacts/release/0.1.0/`**：`wheremy-0.1.0-release.apk` + `SHA256SUMS.txt` + `README.md`。**不进 git**（2.6 MB 二进制没必要进仓库）；哈希与证据在本表与 §10.7 |
-| release APK | `wheremy-0.1.0-release.apk`，**2,746,725 字节**，SHA-256 `05D0EBD179B995570486C1D457F69CFBF8B0F21FF5B44AE2951BFDAC1743703E` —— **这就是真机验收与 TalkBack 走查用的那个包**，由提交 `75e7c54` 构建，2026-10-13 从设备上取回 |
+| release APK | `wheremy-0.1.0-release.apk`，**2,763,109 字节**，SHA-256 `05005413A2EF85014724E6E9BB99A11F3E0F50AEA603BDD0D8D80D27F3E3DDD5` —— 由提交 `e81a5fb` 构建（**2026-10-14 重建版**）。验收结论的迁移依据：`FR-SRC-08`/`FR-BAK-09` 落地后的这个包与验收那次（`b5d6d5b`）在 **`app/src/main` 上逐字节相同**（`git diff --stat b5d6d5b e81a5fb -- app/src/main` 为空），且新包已装机冒烟（多图界面、「自动导出会用这台手机上记住的口令加密」那行都在）。旧版 2,746,725 字节 / `05D0EBD1…` 是 2026-10-13 从设备取回的那个，已被取代 |
 | debug APK | `app-debug.apk`，17,623,205 字节，SHA-256 `7FEE258D3A6A8AE0AB7F932806EFD7925CFFEC954696476A203D0FDB0D4637FE`（仅本机构建产物，不归档） |
 | 签名 | ✅ **用户自己的 keystore**（⭐FR-RLS-01 已完成，2026-10-10；见 §3.2 与 `KEYSTORE.md`）。`apksigner verify --print-certs`：DN `CN=Wheremy, OU=Personal, O=Wheremy, L=Beijing, ST=Beijing, C=CN`，证书 SHA-256 `8118b97d588e43c91a77540154fda366749e0111f1bafd2765ee7a47676b8369`；`apksigner verify` 无输出 = 通过 |
 | keystore **位置** | §3.2（`D:\keys\wheremy-release.jks`，别名 `wheremy-release`）——**只记位置，口令只在用户自己的密码管理器里** |

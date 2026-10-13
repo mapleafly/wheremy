@@ -9,8 +9,8 @@
 | 项 | 内容 |
 |---|---|
 | `versionName` / `versionCode` | `0.1.0` / `1`（首个交付版，未发布过，不需要 +1） |
-| commit | 本记录所在提交 **`70345b9`**；**归档的那个包由 `75e7c54` 构建**（依据：APK 内 `META-INF/version-control-info.textproto`；两者在 `app/src/main` 上零差异） |
-| 发布物文件名 + SHA-256 | **`wheremy-0.1.0-release.apk`**，2,746,725 字节，`05d0ebd179b995570486c1d457f69cfbf8b0f21ff5b44ae2951bfdac1743703e` |
+| commit | 本记录所在提交见 git 历史；**归档的那个包由 `e81a5fb` 构建**（依据：APK 内 `META-INF/version-control-info.textproto`）。**2026-10-14 重新归档过一次**：`FR-SRC-08` 与 `FR-BAK-09` 落地后重构建，与真机验收那次（`b5d6d5b`）在 **`app/src/main` 上逐字节相同**（`git diff --stat b5d6d5b e81a5fb -- app/src/main` 为空），所以 §10.6–§10.8.1 的验收结论对这一个包同样成立；新包另做了装机的两处冒烟（多图界面 + 加密那行状态，都在） |
+| 发布物文件名 + SHA-256 | **`wheremy-0.1.0-release.apk`**，**2,763,109 字节**，`05005413a2ef85014724e6e9bb99a11f3e0f50aea603bdd0d8d80d27f3e3ddd5`（2026-10-14 重建版；旧版 2,746,725 字节 / `05d0ebd179b995570486c1d457f69cfbf8b0f21ff5b44ae2951bfdac1743703e` 已被它取代） |
 | 签名摘要 | DN `CN=Wheremy, OU=Personal, O=Wheremy, L=Beijing, ST=Beijing, C=CN`；证书 SHA-256 `8118b97d588e43c91a77540154fda366749e0111f1bafd2765ee7a47676b8369`；`apksigner verify` 无输出＝通过 |
 | 归档位置 | **`artifacts/release/0.1.0/`**（APK + `SHA256SUMS.txt` + `README.md`）；**不进 git**，哈希与证据在 `RELEASE.md` §10.10 |
 | 发布负责人 / 日期 | **待用户签**：软件经理＝用户本人（只有他持 keystore）；日期留空待填 |
