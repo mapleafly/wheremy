@@ -233,7 +233,7 @@ inline fun <reified VM : ViewModel> appViewModel(
 以及两条**引用计数查询**：
 - `refsTo(path)` `:106` — 还有多少行指着这个路径。注释钉住：调用方必须**先删掉自己的行再问**，否则永远数到自己；
   原图与缩略图各一列但一处数就行（两个目录文件名互不重合）。
-- `otherOwnersOnPath(ownerType, ownerId, path)` `:114` — 除自己之外**按 ownerType 分开数**（`COUNT(DISTINCT ownerId)`），
+- `otherOwnersOnPath(ownerType, ownerId, path)` `:114` — 除自己之外**按 ownerType 分开数**（`COUNT(DISTINCT ownerId)`）。**多图之后（`ADR-26`）它要按「该主人的每一行」逐个路径调用**，不能只问第一张：
   返回 `PhotoOwnerCount(ownerType, owners)` `:126`。删除确认框那句"照片会不会跟着没"就靠它。
 
 ### 4.4 派生列 `data/db/SearchTextBuilder.kt`（38 行）
@@ -293,6 +293,7 @@ internal suspend fun deleteUnreferencedPhotoFiles(photoDao, photoStore, paths) =
 ```
 **这是全项目照片文件回收的唯一一条规则**，物品侧和位置侧都必须走它。
 调用契约同 5.1：先删/换自己的行，再进来。
+**多图之后（`ADR-26`）再加一条**：调用方要把**该主人所有照片行**的路径都传进来（`paths` 是列表，函数内部已经 `distinct()`）——只传第一张会让其余几张变成孤儿字节。
 
 ---
 
@@ -796,7 +797,7 @@ ReminderWorker.doWork → runOnce(force=false) → ReminderEngine.plan
 6. `closeWithoutAsking`：shells 先快照 → `analysis?.cancel()` → 才 launch 删除 → **`finished = true` 排在删除之后**。
    反了会造出"退出时没东西可删、删完才发现行刚落库"的幽灵记录（批次 X/AR 的事故）。
 7. `discardCurrent` 的双守卫：`slot.itemId != null || slots.size < 2` 时**什么都不做**——已落库的行不能从这条路走。
-8. `delete(itemId)`：**先删行**（item → tags → photos）再 `deleteUnreferenced`。
+8. `delete(itemId)`：**先删行**（item → tags → photos，**photos 是该物品的全部行**，`ADR-26`）再 `deleteUnreferenced`；`photoDeletionOf` 数「照片会不会跟着没」时同样按全部行数。
 9. `LocationRepository.setPhoto`：require 行在 → 写文件 → 事务替换 → 失败删新 → 最后清旧。
 10. `BackupRepository.import`：读包 → validate → 事务落库 → 删多余（仅 OVERWRITE）→ 搬照片 → finally 清 `.incoming`。
 11. `ReminderWorker`：**通知真发出去了才 `markExpireNotified`**。

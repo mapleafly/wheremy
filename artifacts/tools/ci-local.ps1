@@ -59,11 +59,20 @@ foreach ($s in $steps) {
 $files = Get-ChildItem app\build\test-results\testDebugUnitTest\*.xml -ErrorAction SilentlyContinue
 if ($files) {
     $t = 0; $f = 0; $e = 0
+    # 顺手把失败的用例名抓出来：2026-10-13 那次红是偶发，日志一删就再也查不出是哪条（教训）
+    $bad = [System.Collections.Generic.List[string]]::new()
     foreach ($file in $files) {
         $sx = ([xml](Get-Content $file.FullName -Raw)).testsuite
         $t += [int]$sx.tests; $f += [int]$sx.failures; $e += [int]$sx.errors
+        foreach ($case in $sx.testcase) {
+            if ($case.failure -or $case.error) { $bad.Add("$($sx.name) > $($case.name)") }
+        }
     }
     Write-Output "  测试合计：$($files.Count) 份 XML / $t 例 / failures=$f errors=$e"
+    if ($bad.Count -gt 0) {
+        Write-Output "  ---- 失败的用例（$($bad.Count) 条）----"
+        $bad | ForEach-Object { Write-Output "    $_" }
+    }
 }
 
 if ($failed.Count -gt 0) {

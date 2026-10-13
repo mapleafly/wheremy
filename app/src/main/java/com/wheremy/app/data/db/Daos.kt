@@ -180,6 +180,14 @@ interface PhotoDao {
     @Query("SELECT * FROM item_photo")
     suspend fun all(): List<ItemPhotoEntity>
 
+    /** 按行 id 取一行（多图之后「删掉某一张」要用，`ADR-26`）。 */
+    @Query("SELECT * FROM item_photo WHERE id = :id")
+    suspend fun byId(id: String): ItemPhotoEntity?
+
+    /** 按行 id 删一行。**调用方随后必须把这条路径交给 `deleteUnreferencedPhotoFiles`**（先删行再问引用计数）。 */
+    @Query("DELETE FROM item_photo WHERE id = :id")
+    suspend fun deleteById(id: String)
+
     @Query("DELETE FROM item_photo")
     suspend fun deleteAll()
 

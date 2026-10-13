@@ -427,6 +427,53 @@ class ItemRepository(
 
     suspend fun photosOf(itemId: String): List<ItemPhotoEntity> = photoDao.forOwner(PhotoOwner.ITEM, itemId)
 
+    /**
+     * 给一件**已经存在**的物品再挂一张照片（`FR-SRC-08` / `ADR-26` / `RULES.md` §3.4）。
+     *
+     * 规矩三条：**追加到末尾**（`sortOrder` = 现有最大 + 1，不插中间——插中间会让封面跟着变）、
+     * **到上限就不写**（返回 `false`，一个字节都不落盘）、**行不存在就不写**（同 `swapPhoto` 的拒法）。
+     *
+     * @return 写成功了返回 `true`；到上限或物品行已不在返回 `false`。
+     */
+    suspend fun addPhotoToItem(itemId: String, jpeg: ByteArray): Boolean {
+        val existing = photoDao.forOwner(PhotoOwner.ITEM, itemId)
+        if (existing.size >= MAX_PHOTOS_PER_ITEM) return false
+        if (itemDao.byId(itemId) == null) return false
+
+        val stored = photoStore.write(jpeg)
+        val row = ItemPhotoEntity(
+            id = UUID.randomUUID().toString(),
+            ownerType = PhotoOwner.ITEM,
+            ownerId = itemId,
+            filePath = stored.originalPath,
+            thumbPath = stored.thumbPath,
+            sortOrder = (existing.maxOfOrNull { it.sortOrder } ?: -1) + 1,
+            createdAt = now(),
+        )
+        try {
+            db.withWriteTransaction<Unit> { photoDao.upsert(row) }
+        } catch (t: Throwable) {
+            // 行没落库，谁写出来的字节谁扫干净（同 newDraft 的收口）
+            photoStore.delete(stored.originalPath)
+            photoStore.delete(stored.thumbPath)
+            throw t
+        }
+        return true
+    }
+
+    /**
+     * 删掉某一件物品的**某一张**照片（`FR-SRC-08` / `ADR-26`）。
+     *
+     * **先删行、再按引用计数回收文件**：删掉封面那张之后，新的第一张自动成为封面（不在这里重排 `sortOrder`——
+     * 留空洞不影响"第一张"的定义，`forOwner` 是 `ORDER BY sortOrder`）。
+     * 删掉最后一张是允许的：无照片物品本来就存在（`FR-SRC-09`）。
+     */
+    suspend fun removePhoto(photoId: String) {
+        val row = photoDao.byId(photoId) ?: return
+        db.withWriteTransaction { photoDao.deleteById(photoId) }
+        deleteUnreferencedPhotoFiles(photoDao, photoStore, listOf(row.filePath, row.thumbPath))
+    }
+
     suspend fun thumbPathOf(itemId: String): String? =
         photoDao.forOwner(PhotoOwner.ITEM, itemId).firstOrNull()?.thumbPath
 
@@ -480,38 +527,47 @@ class ItemRepository(
      * 删除确认框要的三个数（`RULES.md` §9.3）。
      * 原图与缩略图**两条路径都要问**，每类主人取 **max 而不是 sum**——
      * 问的是"最多还有几个人共用"，不是"几个路径上各有几个人"。
+     *
+     * **多图（`ADR-26`）**：该物品的**每一行**照片的每条路径都要问一遍（`paths` 先 `distinct()`）。
+     * 多图之前这里只问第一张，于是"第二张被别人共用着"这件事不会被说出来——界面就会说一句不成立的话。
      */
     suspend fun photoDeletionOf(itemId: String): PhotoDeletion {
-        val photo = photoDao.forOwner(PhotoOwner.ITEM, itemId).firstOrNull()
-            ?: return PhotoDeletion(hasPhoto = false, otherItems = 0, otherOwners = 0)
+        val photos = photoDao.forOwner(PhotoOwner.ITEM, itemId)
+        if (photos.isEmpty()) return PhotoDeletion(hasPhoto = false, otherItems = 0, otherOwners = 0)
 
         var otherItems = 0
         var otherOwners = 0
-        listOf(photo.filePath, photo.thumbPath).filter { it.isNotBlank() }.forEach { path ->
-            photoDao.otherOwnersOnPath(PhotoOwner.ITEM, itemId, path).forEach { row ->
-                if (row.ownerType == PhotoOwner.ITEM) {
-                    otherItems = maxOf(otherItems, row.owners)
-                } else {
-                    otherOwners = maxOf(otherOwners, row.owners)
+        photos.flatMap { listOf(it.filePath, it.thumbPath) }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .forEach { path ->
+                photoDao.otherOwnersOnPath(PhotoOwner.ITEM, itemId, path).forEach { row ->
+                    if (row.ownerType == PhotoOwner.ITEM) {
+                        otherItems = maxOf(otherItems, row.owners)
+                    } else {
+                        otherOwners = maxOf(otherOwners, row.owners)
+                    }
                 }
             }
-        }
         return PhotoDeletion(hasPhoto = true, otherItems = otherItems, otherOwners = otherOwners)
     }
 
-    /** 删除：**先删三处行，再按引用计数删文件**。顺序反了会留下无人认领的字节。 */
+    /**
+     * 删除：**先删三处行，再按引用计数删文件**。顺序反了会留下无人认领的字节。
+     *
+     * **多图（`ADR-26`）**：先把该物品**全部**照片行的路径收好再删行——只看第一张会让其余几张
+     * 变成谁都不认的孤儿字节（`ItemPhotoMultiTest` 钉着这条）。
+     */
     suspend fun delete(itemId: String) {
-        val photo = photoDao.forOwner(PhotoOwner.ITEM, itemId).firstOrNull()
+        val paths = photoDao.forOwner(PhotoOwner.ITEM, itemId)
+            .flatMap { listOf(it.filePath, it.thumbPath) }
+            .filter { it.isNotBlank() }
         db.withWriteTransaction {
             itemDao.deleteById(itemId)
             itemDao.clearTags(itemId)
             photoDao.deleteForOwner(PhotoOwner.ITEM, itemId)
         }
-        deleteUnreferencedPhotoFiles(
-            photoDao,
-            photoStore,
-            listOfNotNull(photo?.filePath, photo?.thumbPath),
-        )
+        deleteUnreferencedPhotoFiles(photoDao, photoStore, paths)
     }
 
     // —— 私有收口 ——
@@ -641,5 +697,11 @@ class ItemRepository(
          * 要一个常量是因为界面那句"只显示了前 N 条"得说得出 N（FR-FND-07）。
          */
         const val SEARCH_LIMIT = 300
+
+        /**
+         * 📐 一件物品最多几张照片（`RULES.md` §3.4）。
+         * 够用（全景 + 特写 + 几张细节），且防止自动导出被单件物品拖大。多图见 `ADR-26`。
+         */
+        const val MAX_PHOTOS_PER_ITEM = 9
     }
 }
