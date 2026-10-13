@@ -111,21 +111,22 @@ class BackupRepositoryTest {
         lastMovedAt = null,
     )
 
-    /** 写一对照片文件并把行插进库；返回行。 */
-    private fun addPhoto(ownerType: String, ownerId: String, photoId: String): ItemPhotoEntity = runBlocking {
-        val stored = store.write(testJpeg())
-        val row = ItemPhotoEntity(
-            id = photoId,
-            ownerType = ownerType,
-            ownerId = ownerId,
-            filePath = stored.originalPath,
-            thumbPath = stored.thumbPath,
-            sortOrder = 0,
-            createdAt = 1_000,
-        )
-        db.photoDao().upsert(row)
-        row
-    }
+    /** 写一对照片文件并把行插进库；返回行。`sortOrder` 可指定（多图要按顺序）。 */
+    private fun addPhoto(ownerType: String, ownerId: String, photoId: String, sortOrder: Int = 0): ItemPhotoEntity =
+        runBlocking {
+            val stored = store.write(testJpeg())
+            val row = ItemPhotoEntity(
+                id = photoId,
+                ownerType = ownerType,
+                ownerId = ownerId,
+                filePath = stored.originalPath,
+                thumbPath = stored.thumbPath,
+                sortOrder = sortOrder,
+                createdAt = 1_000,
+            )
+            db.photoDao().upsert(row)
+            row
+        }
 
     private fun seed() = runBlocking {
         db.withWriteTransaction {
@@ -221,6 +222,57 @@ class BackupRepositoryTest {
             val photo = db.photoDao().all().single()
             assertTrue("照片文件要真的搬回来", store.file(photo.filePath).isFile)
             assertTrue(store.file(photo.thumbPath).isFile)
+        }
+    }
+
+    @Test
+    fun `多图往返：一件三张、顺序对、共用一张仍只算一份文件`() {
+        seed()
+        // 「羽绒外套」原本一张（p1, sortOrder 0）；再加一张，第三张与「电钻」共用同一对文件
+        addPhoto(PhotoOwner.ITEM, "coat", "p2", sortOrder = 1)
+        val sharedRow = addPhoto(PhotoOwner.ITEM, "drill", "p9", sortOrder = 0)
+        runBlocking {
+            db.photoDao().upsert(
+                ItemPhotoEntity(
+                    id = "p3",
+                    ownerType = PhotoOwner.ITEM,
+                    ownerId = "coat",
+                    filePath = sharedRow.filePath,
+                    thumbPath = sharedRow.thumbPath,
+                    sortOrder = 2,
+                    createdAt = 1_000,
+                ),
+            )
+        }
+
+        val out = ByteArrayOutputStream()
+        val exported = runBlocking { repo.exportTo(out, at = 42L) }
+        val bytes = out.toByteArray()
+
+        assertEquals("导出计的是**文件**：p1、p2、共用那对 = 3 份（共用只写一次）", 3, exported.photos)
+
+        // 清空本机，模拟换机
+        runBlocking {
+            db.withWriteTransaction {
+                db.photoDao().deleteAll()
+                db.itemDao().deleteAll()
+                db.itemDao().deleteAllTags()
+                db.locationDao().deleteAll()
+            }
+        }
+        store.rootDir.listFiles()?.filter { it.isFile }?.forEach { it.delete() }
+
+        val summary = import(bytes)
+
+        assertEquals("导入计的是**行**：外套三张 + 电钻一张", 4, summary.photos)
+        runBlocking {
+            val coats = db.photoDao().forOwner(PhotoOwner.ITEM, "coat")
+            assertEquals("三张都得回来", 3, coats.size)
+            assertEquals("顺序按 sortOrder 原样回来", listOf(0, 1, 2), coats.map { it.sortOrder })
+            val drill = db.photoDao().forOwner(PhotoOwner.ITEM, "drill").single()
+            assertEquals("共用关系往返后还在（同一对路径）", drill.filePath, coats[2].filePath)
+            assertTrue("第三张的文件真的搬回来了", store.file(coats[2].filePath).isFile)
+            assertTrue(store.file(coats[2].thumbPath).isFile)
         }
     }
 

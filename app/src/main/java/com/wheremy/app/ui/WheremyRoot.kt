@@ -67,6 +67,7 @@ import com.wheremy.app.ui.debug.DevSeedScreen
 import com.wheremy.app.ui.debug.WordListSmokeScreen
 import com.wheremy.app.ui.design.DesignGalleryScreen
 import com.wheremy.app.ui.detail.DetailScreen
+import com.wheremy.app.ui.detail.DetailViewModel
 import com.wheremy.app.ui.gallery.GalleryScreen
 import com.wheremy.app.ui.review.ReviewScreen
 import com.wheremy.app.ui.settings.SettingsScreen
@@ -155,6 +156,8 @@ fun WheremyRoot(
     captureVm: CaptureViewModel = hiltViewModel(),
     // 位置照片要从外壳这条路送进去，所以位置页的 VM 提到这一层
     treeVm: TreeViewModel = hiltViewModel(),
+    // 「加照片」也要走外壳那条唯一收口（deliverPhoto），所以详情页的 VM 同样提到这一层
+    detailVm: DetailViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val start: NavKey = devRouteFor(devRoute) ?: GalleryKey
@@ -217,6 +220,8 @@ fun WheremyRoot(
             target == PhotoTarget.LOCATION -> treeVm.setPhoto(bytes)
             // 录入页开着时换一张：同一个 itemId，填过的字段都留着
             backStack.lastOrNull() is ReviewKey -> captureVm.replaceWith(bytes)
+            // 详情页开着时「加照片」：挂到**这一件**上，不新建记录（FR-SRC-08 / ADR-26）
+            backStack.lastOrNull() is DetailKey -> detailVm.addPhoto(bytes)
             else -> captureVm.capture(bytes)
         }
     }
@@ -358,6 +363,8 @@ fun WheremyRoot(
                             itemId = it.itemId,
                             onBack = { backStack.removeLastOrNull() },
                             onEdit = { itemId -> backStack.add(ReviewKey(itemId)) },
+                            onAddPhoto = askForPhotoSource,
+                            vm = detailVm,
                         )
                     }
                     entry<ReviewKey> {

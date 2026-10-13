@@ -17,20 +17,31 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** 详情页里的一张照片：行 id（删的时候要）+ 绝对路径（画的时候要）——`ADR-26`。 */
+data class DetailPhoto(val id: String, val path: String)
+
 data class DetailUiState(
     val loading: Boolean = true,
     /** 「没有这条记录」——**与"读的时候抛了"分开**：那是两件事，不能都说成"没有" */
     val missing: Boolean = false,
     val failed: Boolean = false,
     val summary: ItemSummary? = null,
-    /** 照片的**绝对路径**（库里存的是 PhotoStore 的相对路径） */
-    val photoPaths: List<String> = emptyList(),
+    /** 这件物品的全部照片，按 `sortOrder`（**第 0 张就是封面**，`RULES.md` §3.4） */
+    val photos: List<DetailPhoto> = emptyList(),
+    /** 正在等确认删掉的那一张（null = 没有弹确认框） */
+    val pendingRemove: DetailPhoto? = null,
     val moveOptions: List<MoveOption> = emptyList(),
     val pendingDelete: PendingDelete? = null,
     val moving: Boolean = false,
     val deleted: Boolean = false,
     val notice: String? = null,
-)
+) {
+    /** 照片的**绝对路径**（库里存的是 PhotoStore 的相对路径）。渲染用。 */
+    val photoPaths: List<String> get() = photos.map { it.path }
+
+    /** 还能不能再加一张（到 9 张上限就置灰，`RULES.md` §3.4 📐）。 */
+    val canAddPhoto: Boolean get() = photos.size < ItemRepository.MAX_PHOTOS_PER_ITEM
+}
 
 /**
  * 详情页（`UI.md` §5）。
@@ -64,7 +75,7 @@ class DetailViewModel @Inject constructor(
                     null
                 } else {
                     val summary = items.summaries(listOf(entity)).single()
-                    val photos = items.photosOf(id).map { items.photoStore.file(it.filePath).absolutePath }
+                    val photos = photosOf(id)
                     summary to photos
                 }
             }.onSuccess { result ->
@@ -74,7 +85,7 @@ class DetailViewModel @Inject constructor(
                         loading = false,
                         missing = result == null,
                         summary = result?.first,
-                        photoPaths = result?.second.orEmpty(),
+                        photos = result?.second.orEmpty(),
                     )
                 }
             }.onFailure {
@@ -109,6 +120,69 @@ class DetailViewModel @Inject constructor(
     fun consumeDeleted() = _state.update { it.copy(deleted = false) }
 
     fun consumeNotice() = _state.update { it.copy(notice = null) }
+
+    // —— 多图（`FR-SRC-08` / `ADR-26` / `UI.md` §5.9）——
+
+    /**
+     * 给这件物品**再加一张**（外壳的 `deliverPhoto` 唯一收口把字节送到这里）。
+     *
+     * 到上限时仓储返回 `false`：**一个字节都没落盘**，这里只说一句 🗣「一件物品最多 9 张照片」。
+     */
+    fun addPhoto(jpeg: ByteArray) {
+        val id = itemId ?: return
+        viewModelScope.launch {
+            runCatching { items.addPhotoToItem(id, jpeg) }
+                .onSuccess { added ->
+                    if (added) {
+                        refreshAfterPhotoChange()
+                    } else {
+                        _state.update {
+                            it.copy(
+                                notice = "一件物品最多 ${ItemRepository.MAX_PHOTOS_PER_ITEM} 张照片",
+                            )
+                        }
+                    }
+                }
+                .onFailure { t -> _state.update { it.copy(notice = t.message ?: "加照片失败") } }
+        }
+    }
+
+    fun askRemovePhoto(photo: DetailPhoto) = _state.update { it.copy(pendingRemove = photo) }
+
+    fun cancelRemovePhoto() = _state.update { it.copy(pendingRemove = null) }
+
+    /** 删掉某一张：仓储那边**先删行再按引用计数回收文件**（别人还在用就留着）。 */
+    fun confirmRemovePhoto() {
+        val photo = _state.value.pendingRemove ?: return
+        viewModelScope.launch {
+            runCatching { items.removePhoto(photo.id) }
+                .onSuccess { refreshAfterPhotoChange() }
+                .onFailure { t ->
+                    _state.update { it.copy(pendingRemove = null, notice = t.message ?: "删照片失败") }
+                }
+        }
+    }
+
+    /** 这件物品的全部照片（行 id + 绝对路径），按 `sortOrder`。 */
+    private suspend fun photosOf(id: String): List<DetailPhoto> = items.photosOf(id).map { row ->
+        DetailPhoto(row.id, items.photoStore.file(row.filePath).absolutePath)
+    }
+
+    /**
+     * 加/删照片之后**静默重读**（照片与摘要），**不置 `loading`**——
+     * 置了会让整屏闪一下"读取中"，而这里只是同一件物品的照片变了。
+     */
+    private fun refreshAfterPhotoChange() {
+        val id = itemId ?: return
+        viewModelScope.launch {
+            val entity = items.get(id) ?: return@launch
+            val summary = runCatching { items.summaries(listOf(entity)).single() }.getOrNull()
+            val photos = runCatching { photosOf(id) }.getOrDefault(emptyList())
+            _state.update {
+                it.copy(summary = summary ?: it.summary, photos = photos, pendingRemove = null)
+            }
+        }
+    }
 
     fun askMove() {
         viewModelScope.launch {

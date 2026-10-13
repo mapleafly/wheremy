@@ -182,4 +182,80 @@ class DetailViewModelTest {
         val state = awaitState(vm, "候选读出来") { it.moving && it.moveOptions.isNotEmpty() }
         assertTrue(state.moveOptions.any { it.label == "家" })
     }
+
+    // —— 多图（FR-SRC-08 / ADR-26 / UI.md §5.9）——
+
+    @Test
+    fun `加一张之后变成两张，封面（第一张）不动`() {
+        val id = addItem()
+        val vm = detail()
+        vm.load(id)
+        val before = awaitState(vm, "先读出来") { it.summary != null }
+        assertEquals("前置：一件物品一张照片", 1, before.photos.size)
+        val cover = before.photos.first().path
+
+        vm.addPhoto(testJpeg(width = 500, height = 500))
+
+        val after = awaitState(vm, "加完重读") { it.photos.size == 2 }
+        assertEquals("封面仍是第一张（RULES.md §3.4）", cover, after.photos.first().path)
+        assertTrue("两张的路径不同", after.photos[0].path != after.photos[1].path)
+        assertTrue("还能再加（没到上限）", after.canAddPhoto)
+    }
+
+    @Test
+    fun `到 9 张上限时说那一句，而不是默默失败`() {
+        val id = addItem()
+        runBlocking {
+            repeat(ItemRepository.MAX_PHOTOS_PER_ITEM - 1) {
+                items.addPhotoToItem(id, testJpeg(width = 400, height = 400))
+            }
+        }
+        val vm = detail()
+        vm.load(id)
+        val full = awaitState(vm, "读满 9 张") { it.photos.size == ItemRepository.MAX_PHOTOS_PER_ITEM }
+        assertFalse("到上限了，按钮要置灰（canAddPhoto=false）", full.canAddPhoto)
+
+        vm.addPhoto(testJpeg(width = 300, height = 300))
+
+        val state = awaitState(vm, "给出提示") { it.notice != null }
+        assertEquals(
+            "逐字文案（RULES.md §3.4）",
+            "一件物品最多 ${ItemRepository.MAX_PHOTOS_PER_ITEM} 张照片",
+            state.notice,
+        )
+        assertEquals("还是 9 张，一个字节都没落盘", ItemRepository.MAX_PHOTOS_PER_ITEM, state.photos.size)
+    }
+
+    @Test
+    fun `删掉某一张要先弹确认，确认后照片少一张`() {
+        val id = addItem()
+        runBlocking { items.addPhotoToItem(id, testJpeg(width = 500, height = 500)) }
+        val vm = detail()
+        vm.load(id)
+        val two = awaitState(vm, "读出两张") { it.photos.size == 2 }
+
+        vm.askRemovePhoto(two.photos[0])
+        assertEquals("弹确认框，目标就是那一张", two.photos[0].id, vm.state.value.pendingRemove?.id)
+
+        vm.confirmRemovePhoto()
+
+        val after = awaitState(vm, "删完重读") { it.photos.size == 1 }
+        assertNull("确认框要收掉", after.pendingRemove)
+        assertEquals("剩下的正是原来第二张", two.photos[1].id, after.photos.single().id)
+    }
+
+    @Test
+    fun `取消删除不会动照片`() {
+        val id = addItem()
+        runBlocking { items.addPhotoToItem(id, testJpeg(width = 500, height = 500)) }
+        val vm = detail()
+        vm.load(id)
+        val two = awaitState(vm, "读出两张") { it.photos.size == 2 }
+
+        vm.askRemovePhoto(two.photos[0])
+        vm.cancelRemovePhoto()
+
+        assertNull(vm.state.value.pendingRemove)
+        assertEquals("两张都还在", 2, vm.state.value.photos.size)
+    }
 }

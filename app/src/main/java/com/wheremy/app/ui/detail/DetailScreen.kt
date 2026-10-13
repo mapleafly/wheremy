@@ -1,5 +1,6 @@
 package com.wheremy.app.ui.detail
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,11 +14,16 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -28,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -52,7 +59,14 @@ import java.io.File
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DetailScreen(itemId: String, onBack: () -> Unit, onEdit: (String) -> Unit, vm: DetailViewModel = hiltViewModel()) {
+fun DetailScreen(
+    itemId: String,
+    onBack: () -> Unit,
+    onEdit: (String) -> Unit,
+    /** 「加照片」走外壳那颗来源弹窗（拍照 / 相册），与 FAB 同一个收口（`UI.md` §2.4） */
+    onAddPhoto: () -> Unit,
+    vm: DetailViewModel = hiltViewModel(),
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
 
@@ -105,9 +119,36 @@ fun DetailScreen(itemId: String, onBack: () -> Unit, onEdit: (String) -> Unit, v
                     "这条记录读不出来，返回上一页再试一次。",
                     modifier = Modifier.testTag("detail_failed"),
                 )
-                else -> DetailBody(summary = state.summary!!, photoPaths = state.photoPaths)
+                else -> DetailBody(
+                    summary = state.summary!!,
+                    photos = state.photos,
+                    canAddPhoto = state.canAddPhoto,
+                    onAddPhoto = onAddPhoto,
+                    onAskRemove = vm::askRemovePhoto,
+                )
             }
         }
+    }
+
+    if (state.pendingRemove != null) {
+        // 只剩一张时换一句话：删完这件物品就没有照片了（`UI.md` §5.9 / `RULES.md` §3.4）
+        val last = state.photos.size <= 1
+        AlertDialog(
+            onDismissRequest = vm::cancelRemovePhoto,
+            // 标题只点题；**结论那句放在正文里**（`RULES.md` §3.4 的逐字文案就是正文那两句）
+            title = { Text("删掉这张照片") },
+            text = {
+                Text(
+                    if (last) {
+                        "删掉这张照片？这件物品就没有照片了"
+                    } else {
+                        "删掉这张照片？"
+                    },
+                )
+            },
+            confirmButton = { TextButton(onClick = vm::confirmRemovePhoto) { Text("删掉") } },
+            dismissButton = { TextButton(onClick = vm::cancelRemovePhoto) { Text("取消") } },
+        )
     }
 
     state.pendingDelete?.let { pending ->
@@ -138,7 +179,13 @@ fun DetailScreen(itemId: String, onBack: () -> Unit, onEdit: (String) -> Unit, v
 }
 
 @Composable
-private fun DetailBody(summary: ItemSummary, photoPaths: List<String>) {
+private fun DetailBody(
+    summary: ItemSummary,
+    photos: List<DetailPhoto>,
+    canAddPhoto: Boolean,
+    onAddPhoto: () -> Unit,
+    onAskRemove: (DetailPhoto) -> Unit,
+) {
     // 1 名称
     Text(
         text = summary.item.name.ifBlank { "未命名物品" },
@@ -146,24 +193,60 @@ private fun DetailBody(summary: ItemSummary, photoPaths: List<String>) {
         modifier = Modifier.testTag("detail_name"),
     )
 
-    // 2 照片横滚（200dp 宽 1:1、Crop）；没有照片就整块不给
-    if (photoPaths.isNotEmpty()) {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
-            items(photoPaths) { path ->
+    // 2 照片区（多图，`UI.md` §5.9）：横向可滑、第一张就是封面；每张右上角「删掉这张」；末尾「加照片」
+    LazyRow(
+        modifier = Modifier.testTag("detail_photo_row"),
+        horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm),
+    ) {
+        if (photos.isEmpty()) {
+            // 无照片物品是合法状态（FR-SRC-09）：给个占位块，别让这一屏看起来是坏的
+            item {
                 Box(
                     modifier = Modifier
                         .width(200.dp)
                         .aspectRatio(1f)
-                        .clip(MaterialTheme.shapes.medium),
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    AsyncImage(
-                        model = File(path),
-                        // 这里是一排照片（不是什么有名字的东西），给一句能听懂的说明
-                        contentDescription = "物品照片",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    Text("还没有照片", style = MaterialTheme.typography.bodySmall)
                 }
+            }
+        }
+        items(photos, key = { it.id }) { photo ->
+            Box(
+                modifier = Modifier
+                    .width(200.dp)
+                    .aspectRatio(1f)
+                    .clip(MaterialTheme.shapes.medium),
+            ) {
+                AsyncImage(
+                    model = File(photo.path),
+                    // 这里是一排照片（不是什么有名字的东西），给一句能听懂的说明
+                    contentDescription = "物品照片",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                IconButton(
+                    onClick = { onAskRemove(photo) },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .testTag("detail_remove_photo"),
+                ) {
+                    Icon(Icons.Filled.Close, contentDescription = "删掉这张")
+                }
+            }
+        }
+        item {
+            OutlinedButton(
+                onClick = onAddPhoto,
+                enabled = canAddPhoto,
+                modifier = Modifier
+                    .width(200.dp)
+                    .aspectRatio(1f)
+                    .testTag("detail_add_photo"),
+            ) {
+                Text("加照片")
             }
         }
     }
