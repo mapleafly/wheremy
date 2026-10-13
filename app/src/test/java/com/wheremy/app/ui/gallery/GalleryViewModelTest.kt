@@ -171,12 +171,17 @@ class GalleryViewModelTest {
 
     @Test
     fun `有词时名字命中的排前面`() {
-        addItem("收纳盒", searchText = "收纳盒 装外套用的")
+        val box = addItem("收纳盒", searchText = "收纳盒 装外套用的")
         val coat = addItem("深灰羽绒外套", searchText = "深灰羽绒外套")
 
         val vm = gallery()
         vm.onQueryChange("外套")
-        val rows = awaitRows(vm, "搜到两件") { it.rows.size == 2 }.rows
+        // ⚠️ 等待条件**必须**带上顺序：只等 `rows.size == 2` 的话，"还没搜的中间态"也满足
+        // （两件都在列表里），断言就可能读到未排序的那一帧 —— 快机器上看不到，慢 runner 上必炸
+        // （真 CI 抓到过：GalleryViewModelTest > 有词时名字命中的排前面 ComparisonFailure）。
+        val rows = awaitRows(vm, "搜到两件且名字命中的在前") {
+            it.rows.map { r -> r.item.id } == listOf(coat, box)
+        }.rows
 
         assertEquals("名字命中的在前", coat, rows.first().item.id)
     }
