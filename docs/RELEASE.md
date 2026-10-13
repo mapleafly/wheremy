@@ -331,7 +331,7 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 
 ### 8.2 发布记录
 
-模板 `templates/release-checklist.md`：复制一份填，建议文件名 `release-<versionName>-<日期>.md`；**别把填好的记录放回 `templates/`**，那是空白表单。发布记录至少要留下：环境快照两行（§6.4）、⭐ 七项的签收人、G0–G5 的证据、人工清单七条的回话、发布物哈希、24 小时观察项、回滚决定与签收人。
+模板 `templates/release-checklist.md`：复制一份填，建议文件名 `release-<versionName>-<日期>.md`；**别把填好的记录放回 `templates/`**。**0.1.0 已经填好一份：`docs/release-0.1.0-2026-10-13.md`**（照它抄一遍就知道每格该写什么），那是空白表单。发布记录至少要留下：环境快照两行（§6.4）、⭐ 七项的签收人、G0–G5 的证据、人工清单七条的回话、发布物哈希、24 小时观察项、回滚决定与签收人。
 
 **发布物哈希**：出包后对 APK 算一次 SHA-256 记下来（Windows 上 `certutil -hashfile <apk> SHA256`，或任何手边的哈希工具），连文件名一起记；配套的签名摘要用 `apksigner verify --print-certs` 看（§3.2）。下次要判"机上装的是不是这一版"，这两样是唯一的凭据。
 
@@ -528,7 +528,7 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 **环境快照**（模板要求的两行）：
 
 1. 手机上装的是 **Wheremy release 包**：`com.wheremy.app`、versionName `0.1.0` / versionCode `1`、
-   用**用户自己的 keystore** 签名（`apksigner` 的 SHA-256 `B070DD26…`）、**2.62 MB**；
+   用**用户自己的 keystore** 签名（`apksigner` 证书摘要 `8118b97d…`）、**2.62 MB**；〔2026-10-13 更正：本行原先写 `B070DD26…`，是错的。依据有两条：① 2026-10-10 做 ⭐FR-RLS-01 时，`apksigner verify` 与 `signingReport` 两处互相印证同一证书 `8118b97d…`（见 `CHANGELOG.md` 那节）；② 2026-10-13 用 `adb install -r` 覆盖安装到当时机器上那个包**成功**——签名不同会直接失败，所以 10-12 装的那个包与今天这个**同一个证书**。签名摘要是发布记录的必填项，写错会误导排障，故按证据改正。〕、**2.62 MB**；
    装的时间 **2026-10-12 15:38**（重装，故走查开始时是全新空白）；
 2. 数据状态：走查开始前 **全新空白**（用户此前把两个包都删了）；通知权限：走查前 **未授过**（第 7 步里授的）。
 
