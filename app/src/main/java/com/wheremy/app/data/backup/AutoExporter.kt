@@ -2,6 +2,7 @@ package com.wheremy.app.data.backup
 
 import com.wheremy.app.data.settings.SettingsRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.time.Instant
@@ -32,13 +33,18 @@ class AutoExporter(
         val sink = sinkProvider()
             ?: return record(at, "还没选保存位置，这次没导出。点「选择保存位置」挑一个文件夹。")
 
+        // 本机记住的口令（`FR-BAK-09` / `ADR-27`）：有就加密，没有就是明文 v1 包。
+        // 自动导出**不会为口令停下来问人**——那正是"记住在本机"的意义。
+        val password = settings.changes.first().backupPassword.ifBlank { null }
+
         val bytes = withContext(Dispatchers.IO) {
-            ByteArrayOutputStream().also { backup.exportTo(it, at = at) }.toByteArray()
+            ByteArrayOutputStream().also { backup.exportTo(it, at = at, password = password) }.toByteArray()
         }
         val fileName = fileNameFor(at)
         return try {
             sink.write(bytes, fileName)
-            record(at, "已导出 $fileName（${bytes.size / 1024} KB）")
+            val how = if (password == null) "明文" else "已加密"
+            record(at, "已导出 $fileName（${bytes.size / 1024} KB，$how）")
         } catch (t: Throwable) {
             record(at, "导出失败：${t.message ?: t::class.simpleName}")
         }

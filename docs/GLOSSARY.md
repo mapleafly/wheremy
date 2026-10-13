@@ -150,6 +150,12 @@
 | 批次号（AT/AU、AK、AA…） | 真机验收与修复的批次标签；规则里写"哪一批的事故"就指它 | 引用散见 `RULES.md` §15、`UI.md` §14、`PRD.md`；历史记录在 `docs/superpowers/plans/`（**只读存档**，不参与裁决，`README.md` §8） |
 | spec | 原设计文档 `docs/superpowers/specs/2026-10-02-wheremy-design.md`；"spec §N"是**那份**的节号 | `PRD.md` §0 |
 
+| 词 | 代码符号 / 库表列 | 一句话 |
+|---|---|---|
+| 加密包 | `BackupManifest.encryption` / `formatVersion = 2` | 明文小头 + AES-256-GCM 负载的备份包；**口令不写在包里**（`ADR-27`） |
+| 口令 | `AppSettings.backupPassword` | 导出加密包时用户自己设的字符串（≥ 8 位）；只在本机记住，换机导入要手输 |
+| verifier | `BackupEncryption.verifier` | 用派生密钥加密的一小段固定明文；导入时先验它，**错了就说是口令不对** |
+
 ## 11. 写作时发现的差异（2026-10-07 已全部处理）
 
 | 文档 A 位置 | 文档 B 位置 | 冲突点 | 处理 |

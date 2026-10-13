@@ -84,7 +84,7 @@
 | `FR-BAK-06` | 引用完整性：四条拒，一条放行 | ✅ | ✅ | 同参照：四条拒 + 一条放行；孤儿/环让外键拒掉整个包（`parentsFirst`） | `BackupRepositoryTest`；真机（包里有对不上的引用时那句「备份里有对不上的引用，已取消导入，原来的数据没有动」） |
 | `FR-BAK-07` | 备份格式与 Room schema 解耦 | ✅ | ✅ | 同参照：`schemaVersion` 是导入侧**唯一**的兼容闸门，只查上界不查下界 | `BackupRepositoryTest`（更高版本直接拒，本机数据一条不动） |
 | `FR-BAK-08` | 定时自动导出 | ⬜ | ✅ | **每天一份**：设置页开关 + 「选择保存位置」（SAF `OpenDocumentTree`，**当场持久化授权**，不然重启后打不开）+ 「立刻导出一份」；WorkManager 周期任务 1 天、唯一名 `wheremy-auto-export`、`KEEP` 不重复排队，**开关在 worker 里判**（这样设置里开关一下立刻生效，也不用管取消）；文件名 `wheremy-auto-<本地日期>.zip`，只留最近 7 份（认前缀，绝不碰同目录里别的文件）；**成功失败都写进设置页那一行** | `AutoExporterTest` 5 例（没配落点要说明 / 名字带日期且是 zip / 写失败要说原因 / **导出的包能原样导回来** / 常量一致）；真机：选 `/sdcard/wheremy-backup` → 「立刻导出一份」→ `wheremy-auto-2026-10-10.zip`（43 KB）真躺在那个目录里，设置页显示「上次（10月10日 10:33）：已导出 …」；WorkManager 库里 `AutoExportWorker` 周期 86,400,000 ms（连 `-wal` 拉库核对） |
-| `FR-BAK-09` | 备份加密 | ⬜ | 🟡 | **本实现开始做**（2026-10-13 用户拍板，`ADR-27`）：全包加密（AES-256-GCM + PBKDF2，格式 v2），口令自选；**参照实现未做** | — |
+| `FR-BAK-09` | 备份加密 | ⬜ | ✅ | **本实现开始做**（2026-10-13 用户拍板，`ADR-27`）：全包加密（AES-256-GCM + PBKDF2，格式 v2），口令自选；**参照实现未做** | — |
 | `FR-CFG-01` | 设置页三节：到期提醒 / AI 分析照片 / 备份 | ✅ | ✅ | 同参照：三节（到期提醒 / AI 分析照片 / 备份）+ 开发期工具 | 真机逐节走过 |
 | `FR-CFG-02` | AI 开关 + 三个字段（base_url / model / api key） | ✅ | ✅ | 同参照：AI 开关 + 接口地址 / 模型名 / key 三个字段 | 真机（设备上的偏好文件里读到 `base_url=https://api.deepseek.com`、`model=deepseek-flash`） |
 | `FR-CFG-03` | key 只存 DataStore | ✅ | ✅ | 同参照：key 只在 DataStore（`files/datastore/wheremy_settings.preferences_pb`），不进备份包、不进留痕、不进日志 | 真机；`BackupRepositoryTest`（包内无设置） |

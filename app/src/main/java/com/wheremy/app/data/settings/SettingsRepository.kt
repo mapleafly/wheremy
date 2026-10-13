@@ -63,6 +63,14 @@ data class Settings(
     val autoExportUri: String = "",
     val autoExportLastAt: Long = 0L,
     val autoExportLastResult: String = "",
+    /**
+     * 备份加密用的口令（`FR-BAK-09` / `ADR-27`），空串 = 不加密。
+     *
+     * **只活在这台手机上**：不写进包、不随任何东西同步（`FR-BAK-04` 不许放松）。
+     * 与 API key 同一级别存放（都是应用私有 DataStore）；系统级加密（Keystore / EncryptedSharedPreferences）
+     * 留作后续，触发条件＝用户要求更严。
+     */
+    val backupPassword: String = "",
 ) {
     /** 四样齐了才算能用：开关、key、地址、模型。 */
     val hasUsableKey: Boolean
@@ -114,6 +122,7 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
             autoExportUri = prefs[KEY_AUTO_EXPORT_URI].orEmpty(),
             autoExportLastAt = prefs[KEY_AUTO_EXPORT_LAST_AT] ?: 0L,
             autoExportLastResult = prefs[KEY_AUTO_EXPORT_LAST_RESULT].orEmpty(),
+            backupPassword = prefs[KEY_BACKUP_PASSWORD].orEmpty(),
         )
     }
 
@@ -201,6 +210,16 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
     suspend fun setAutoExportEnabled(enabled: Boolean) = store.edit { it[KEY_AUTO_EXPORT_ENABLED] = enabled }.let { }
 
     /**
+     * 记下（或清掉）备份口令（`FR-BAK-09` / `ADR-27`）。
+     *
+     * 传 null/空串 = 不加密，自动导出回到明文 v1 包。**口令只在这台手机上**，不写进任何包。
+     */
+    suspend fun setBackupPassword(password: String?) = store.edit { prefs ->
+        val value = password?.trim().orEmpty()
+        if (value.isEmpty()) prefs.remove(KEY_BACKUP_PASSWORD) else prefs[KEY_BACKUP_PASSWORD] = value
+    }.let { }
+
+    /**
      * 记下用户选的那棵 SAF 目录树。传 null/空串 = 取消（下次自动导出会跳过并说明原因）。
      *
      * ⚠️ 这里只存 URI 字符串；**持久化授权**（`takePersistableUriPermission`）由界面层在拿到结果时立刻做，
@@ -238,6 +257,9 @@ class SettingsRepository(private val store: DataStore<Preferences>) {
         val KEY_EXPIRE_KINDS = stringPreferencesKey("word_expire_kinds")
         val KEY_LOCATION_KINDS = stringPreferencesKey("word_location_kinds")
         val KEY_AUTO_EXPORT_ENABLED = booleanPreferencesKey("auto_export_enabled")
+
+        /** 备份口令（`ADR-27`）：空串 = 不加密。**这个键永远不出现在包里**（`FR-BAK-04`）。 */
+        val KEY_BACKUP_PASSWORD = stringPreferencesKey("backup_password")
         val KEY_AUTO_EXPORT_URI = stringPreferencesKey("auto_export_uri")
         val KEY_AUTO_EXPORT_LAST_AT = longPreferencesKey("auto_export_last_at")
         val KEY_AUTO_EXPORT_LAST_RESULT = stringPreferencesKey("auto_export_last_result")

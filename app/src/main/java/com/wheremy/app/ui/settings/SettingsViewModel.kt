@@ -4,8 +4,10 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.wheremy.app.data.backup.BackupFormatException
+import com.wheremy.app.data.backup.BackupPasswordRequired
 import com.wheremy.app.data.backup.BackupRepository
 import com.wheremy.app.data.backup.BackupSummary
+import com.wheremy.app.data.backup.BackupWrongPassword
 import com.wheremy.app.data.backup.ImportMode
 import com.wheremy.app.data.backup.formatBytes
 import com.wheremy.app.data.repo.CATEGORIES
@@ -58,6 +60,12 @@ data class SettingsUiState(
     val busy: Boolean = false,
     /** 备份那一次的结果那句话（五种收场之一） */
     val backupResult: String? = null,
+    /** 本机记住的备份口令（空 = 不加密），用来显示那一行状态（`UI.md` §7.10）。 */
+    val backupPassword: String = "",
+    /** 选中的包是加密的、在等口令（`FR-BAK-09`）：界面据此弹输入框。 */
+    val needImportPassword: Boolean = false,
+    /** 口令输错了：**显示在对话框里**，不并进"导入失败"那句话（`RULES.md` §12.5）。 */
+    val importPasswordError: String? = null,
     /** 自动导出（`FR-BAK-08`）：开关、落点、上次结果。 */
     val autoExportEnabled: Boolean = false,
     val autoExportUri: String = "",
@@ -149,6 +157,7 @@ class SettingsViewModel @Inject constructor(
                         autoExportUri = saved.autoExportUri,
                         autoExportLastAt = saved.autoExportLastAt,
                         autoExportLastResult = saved.autoExportLastResult,
+                        backupPassword = saved.backupPassword,
                         wordLists = effective,
                         // 草稿同样只在没动过的时候填
                         wordDrafts = WordListKind.entries.associateWith { kind ->
@@ -276,22 +285,64 @@ class SettingsViewModel @Inject constructor(
         _state.update { it.copy(busy = false, backupResult = sentence) }
     }
 
-    /** @param open 由界面层打开 SAF 流；返回 null 表示"连文件都没打开"（既不是异常也不算成功）。 */
-    fun exportBackup(open: () -> java.io.OutputStream?) {
+    /**
+     * @param open 由界面层打开 SAF 流；返回 null 表示"连文件都没打开"（既不是异常也不算成功）。
+     * @param password 非空 = 写**加密 v2 包**（`ADR-27`）；null = 明文 v1 包（旧版本也能导入）。
+     * @param remember 勾了「在这台手机上记住」：把口令存下来给自动导出用（**不写进包**）。
+     */
+    fun exportBackup(open: () -> java.io.OutputStream?, password: String? = null, remember: Boolean = false) {
         viewModelScope.launch {
+            if (remember && password != null) settings.setBackupPassword(password)
             operate(label = "导出", fallback = FALLBACK_EXPORT) {
-                open()?.use { stream -> backup.exportTo(stream) }
+                open()?.use { stream -> backup.exportTo(stream, password = password) }
             }
         }
     }
 
-    fun importBackup(mode: ImportMode, open: () -> java.io.InputStream?) {
+    fun importBackup(mode: ImportMode, open: () -> java.io.InputStream?, password: String? = null) {
         val label = if (mode == ImportMode.MERGE) "合并导入" else "覆盖导入"
         viewModelScope.launch {
-            operate(label = label, fallback = FALLBACK_IMPORT) {
-                open()?.use { stream -> backup.importFrom(stream, mode) }
+            if (_state.value.busy) return@launch
+            _state.update {
+                it.copy(busy = true, backupResult = null, needImportPassword = false, importPasswordError = null)
             }
+            val sentence = try {
+                val summary = open()?.use { stream -> backup.importFrom(stream, mode, password) }
+                if (summary == null) {
+                    "${label}失败：打不开那个文件，换个位置再试"
+                } else {
+                    buildString {
+                        append(
+                            "${label}完成 · 位置 ${summary.locations} 个 · 物品 ${summary.items} 件 · 照片 ${summary.photos} 张",
+                        )
+                        if (summary.bytes > 0) append(" · ${formatBytes(summary.bytes)}")
+                    }
+                }
+            } catch (e: BackupPasswordRequired) {
+                // 这不是错：问他要口令就是了（`RULES.md` §12.5）
+                _state.update { it.copy(needImportPassword = true) }
+                null
+            } catch (e: BackupWrongPassword) {
+                // 口令不对：**对话框留着**让人重试，错误显示在框里（不是"导入失败"那句话）
+                _state.update { it.copy(needImportPassword = true, importPasswordError = e.message) }
+                null
+            } catch (e: BackupFormatException) {
+                "${label}失败：${e.message}"
+            } catch (e: Throwable) {
+                "${label}失败：$FALLBACK_IMPORT"
+            }
+            _state.update { it.copy(busy = false, backupResult = sentence) }
         }
+    }
+
+    /** 关掉"要口令"的对话框（用户取消）：一张表都还没写过，什么都不用收拾。 */
+    fun cancelImportPassword() = _state.update {
+        it.copy(needImportPassword = false, importPasswordError = null)
+    }
+
+    /** 清掉本机记住的备份口令（回到明文导出）。 */
+    fun clearBackupPassword() {
+        viewModelScope.launch { settings.setBackupPassword(null) }
     }
 
     fun consumeBackupResult() = _state.update { it.copy(backupResult = null) }

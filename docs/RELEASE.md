@@ -169,6 +169,7 @@
 
 ### 5.2 备份包向前兼容规则
 
+- **第二条闸门（2026-10-13 起）**：包里的 `formatVersion > BACKUP_FORMAT_VERSION` 就拒，文案 🗣「这个备份来自更新的版本，先升级应用再导入」（v1 明文包 = formatVersion 1，永远是下界、永远可读）；
 - **闸门只有一条**：包里的 `schemaVersion > DB_SCHEMA_VERSION` 就拒，文案是 `BackupRepository.kt:140-142` 那句（以「这个备份来自更新的版本」开头、以「先升级应用再导入」结尾，括号里插 `schema X > N`）。**语义要读准**：这是"你机上的应用比包旧"，解法是**升应用**；把包里的号改小只会让后面的字段解析悄悄出错。
 - **旧包一律照收**：没有下界检查。所以"新版本能导入旧包"必须自己演一遍（§3 第 7 条）。
 - `explicitNulls = false` ⇒ NULL 是**缺键**：读侧一律 `.get()`，不许 `row["col"]`（`BackupFormat.kt:46-50`、`REBUILD.md` §7 B6）。

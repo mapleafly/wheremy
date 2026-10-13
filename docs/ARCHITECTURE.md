@@ -545,7 +545,26 @@ WorkManager → ReminderWorker.doWork() → runOnce(ctx, force=false)
 
 ---
 
-## 10. 备份链路（三个文件）
+## 10. 备份链路
+
+> ⚠️ **2026-10-13 更正（`PLAN.md` F51）**：本节原先是照着**参照实现**（`D:\src\qoder\wheremy`）的备份链路写的——
+> `§10.1 BackupFormat.kt`、`§10.2 BackupIo.kt` 这两个**文件名在本实现里根本不存在**（那是参照实现的文件），
+> 里面的行号与 API 名（`export(into:)` / `import(from:)`）也都是那边的。本文档自称 as-built，这是失真。
+>
+> **本实现的实际文件与入口**（以代码为准）：
+>
+> | 文件 | 负责 |
+> |---|---|
+> | `data/backup/BackupModels.kt` | 常量与序列化模型：`BACKUP_FORMAT_VERSION`(2) / `PLAIN_FORMAT_VERSION`(1) / `ENTRY_*`、`BackupManifest`、`BackupEncryption`、`BackupData`、`ImportMode`、`BackupSummary`、`BackupFormatException` 与两个子类、`isPhotoEntry` 白名单 |
+> | `data/backup/BackupCrypto.kt` | 加密原语（`ADR-27`）：PBKDF2 派生、AES-256-GCM 按条目加解密、verifier。**不认识 zip / 数据库 / 界面** |
+> | `data/backup/BackupSink.kt` | 落点抽象（SAF 目录树写入 + 文件名前缀） |
+> | `data/backup/BackupRepository.kt` | `exportTo(stream, at, password)` / `importFrom(stream, mode, password)` |
+> | `data/backup/AutoExporter.kt` + `AutoExportWorker.kt` | 定时自动导出（用本机记住的口令，`FR-BAK-08`） |
+>
+> **规则**（逐字文案、判据、四种拒）以 `RULES.md` §12 为准，那份是当前且逐条核对过的；
+> 本节 §10.1–§10.3 的正文**保留为参照实现的描述**，重做或排障时别拿它的行号去对代码。
+
+### 10.1–10.3（参照实现的备份链路，保留备查）
 
 ### 10.1 `BackupFormat.kt`（63 行）
 
@@ -635,6 +654,35 @@ class ContentResolverBackupIo(ctx) : BackupIo            // :20，两个方法�
   `action` 返回 null（连文件都没打开，`:235`/`:243`）走第三种「打不开那个文件，换个位置再试」（`:269`）。
   **重做时这三条分支的分工不许合并**：把 `err.message` 无条件贴出来就是把英文 `IOException` 贴给用户，
   而把 null 当异常会让"没权限"和"读断了"说同一句话。
+
+---
+
+### 10.4 加密容器 v2（`FR-BAK-09` / `ADR-27`，2026-10-13）
+
+**两种包并存**，读的人靠 `manifest.json` 的 `encryption` 段分辨：
+
+| 条目 | 明文包（v1，`formatVersion = 1`） | 加密包（v2，`formatVersion = 2`） |
+|---|---|---|
+| `manifest.json` | 明文 | **明文**（不这样读的人不知道要不要口令） |
+| 表的行 | `data.json` | `data.enc` |
+| 照片 | `photos/**` 明文 | 同名条目，内容是密文 |
+
+- 条目内容 = **12 字节随机 IV + 密文与认证标签**（AES-256-GCM）；**AAD = 条目名**；
+- 口令 → 密钥走 **PBKDF2-HMAC-SHA256**（salt 与迭代数写在 `encryption` 里，起步 210 000）；
+- `encryption.verifierBase64` 是用派生密钥加密的一小段固定明文：**先验它**，于是
+  「口令不对」与「文件坏了」能分开报（`BackupWrongPassword` vs `BackupFormatException`）；
+- **导入是两阶段的**（这是本设计的关键）：`importFrom` 先把整包落到 `stagingDir/pack.zip`
+  （SAF 给的流不能回头），再用 `ZipFile` 随机访问 → **先读 manifest** → 才知道要不要口令 →
+  `keyFor()` 要口令/验口令 → 再逐条目解密。**口令不对或没给口令时，一张表都还没写过**；
+- `formatVersion > BACKUP_FORMAT_VERSION` 直接拒（「这个备份来自更新的版本，先升级应用再导入」）——
+  将来加 v3 时，旧应用会拒收而不是按老规矩乱读；
+- **明文包永远是 v1**（不加密导出写 `PLAIN_FORMAT_VERSION`）：这样"不加密"的包在任何旧版本上都能导入；
+- 口令存在本机 DataStore（`AppSettings.backupPassword`），**不进包、不同步**（`FR-BAK-04`）；
+  自动导出用它，换机导入要手输（`RULES.md` §12.5）。
+
+**为什么先落盘再读**：加密包必须在解析负载**之前**就知道口令；而 `ContentResolver` 给的 `InputStream`
+只能读一遍。整包落盘后 `ZipFile` 可以随机访问（先 manifest、再负载），代价是包体积的临时磁盘占用——
+个人量级（几 MB）可接受，几百 MB 的库要改成流式两遍读。
 
 ---
 

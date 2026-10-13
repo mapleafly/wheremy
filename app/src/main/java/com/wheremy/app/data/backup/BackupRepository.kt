@@ -8,15 +8,15 @@ import com.wheremy.app.data.photos.PhotoStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipException
-import java.util.zip.ZipInputStream
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
+import javax.crypto.spec.SecretKeySpec
 
 /**
  * 备份（`RULES.md` §12）。
@@ -44,68 +44,103 @@ class BackupRepository(
 
     // ————————————————————————— 导出 —————————————————————————
 
-    /** 往调用方打开的流里写一个完整的包。流的打开/关闭由界面层负责（打不开那个文件不算异常，算 null）。 */
-    suspend fun exportTo(stream: OutputStream, at: Long = now()): BackupSummary = withContext(Dispatchers.IO) {
-        // 同一个事务里读四张表（理由见类注释）
-        val snapshot = db.withWriteTransaction {
-            BackupData(
-                locations = db.locationDao().all(),
-                items = db.itemDao().all(),
-                photos = db.photoDao().all(),
-                tags = db.itemDao().allTagRows(),
+    /**
+     * 往调用方打开的流里写一个完整的包。流的打开/关闭由界面层负责（打不开那个文件不算异常，算 null）。
+     *
+     * [password] 为 null 时写**明文 v1 包**（`formatVersion = 1`，旧应用也能导入）；
+     * 给了口令就写**加密 v2 包**（`ADR-27`）：manifest 明文 + `data.enc` + 照片条目全加密。
+     */
+    suspend fun exportTo(stream: OutputStream, at: Long = now(), password: String? = null): BackupSummary =
+        withContext(Dispatchers.IO) {
+            // 同一个事务里读四张表（理由见类注释）
+            val snapshot = db.withWriteTransaction {
+                BackupData(
+                    locations = db.locationDao().all(),
+                    items = db.itemDao().all(),
+                    photos = db.photoDao().all(),
+                    tags = db.itemDao().allTagRows(),
+                )
+            }
+
+            // 口令 → 密钥。salt 与 verifier 明文写在 manifest 里（**口令本身绝不进包**）
+            val salt = if (password != null) BackupCrypto.newSalt() else null
+            val key = if (password != null && salt != null) {
+                BackupCrypto.deriveKey(password, salt, BackupCrypto.ITERATIONS)
+            } else {
+                null
+            }
+            val encryption = if (key != null && salt != null) {
+                BackupEncryption(
+                    saltBase64 = BackupCrypto.toBase64(salt),
+                    verifierBase64 = BackupCrypto.toBase64(BackupCrypto.makeVerifier(key)),
+                )
+            } else {
+                null
+            }
+
+            val written = HashSet<String>()
+            var bytes = 0L
+            // ⚠️ 计数流必须**同时把字节转发给调用方的流**：只加计数不写出去的版本会让导出包变成空的（踩过一次）
+            val counting = object : OutputStream() {
+                override fun write(b: Int) {
+                    bytes++
+                    stream.write(b)
+                }
+
+                override fun write(b: ByteArray, off: Int, len: Int) {
+                    bytes += len
+                    stream.write(b, off, len)
+                }
+
+                override fun flush() = stream.flush()
+
+                // 不替调用方关流：谁打开的谁关（`ZipOutputStream.use` 只会走到这里）
+                override fun close() = stream.flush()
+            }
+            ZipOutputStream(BufferedOutputStream(counting)).use { zip ->
+                zip.putNextEntry(ZipEntry(ENTRY_MANIFEST))
+                zip.write(
+                    json.encodeToString(
+                        BackupManifest(
+                            formatVersion = if (encryption != null) BACKUP_FORMAT_VERSION else PLAIN_FORMAT_VERSION,
+                            schemaVersion = DB_SCHEMA_VERSION,
+                            appVersion = appVersion,
+                            exportedAt = at,
+                            encryption = encryption,
+                        ),
+                    ).toByteArray(),
+                )
+                zip.closeEntry()
+
+                if (key == null) {
+                    zip.putNextEntry(ZipEntry(ENTRY_DATA))
+                    zip.write(json.encodeToString(snapshot).toByteArray())
+                    zip.closeEntry()
+                } else {
+                    zip.putNextEntry(ZipEntry(ENTRY_DATA_ENC))
+                    zip.write(BackupCrypto.seal(key, json.encodeToString(snapshot).toByteArray(), ENTRY_DATA_ENC))
+                    zip.closeEntry()
+                }
+
+                // 照片：同一个路径只写一次（两件共用一张图时第二件指的是同一对文件）
+                snapshot.photos.forEach { photo ->
+                    if (key == null) {
+                        putOnce(zip, written, photo.filePath)
+                        putOnce(zip, written, photo.thumbPath)
+                    } else {
+                        putSealed(zip, written, photo.filePath, key)
+                        putSealed(zip, written, photo.thumbPath, key)
+                    }
+                }
+            }
+            // 计数用的是"文件对"口径，与"完成"那句话说的同一批
+            BackupSummary(
+                locations = snapshot.locations.size,
+                items = snapshot.items.size,
+                photos = written.count { it.startsWith("${PhotoStore.DIR_ORIGINALS}/") },
+                bytes = bytes,
             )
         }
-
-        val written = HashSet<String>()
-        var bytes = 0L
-        // ⚠️ 计数流必须**同时把字节转发给调用方的流**：只加计数不写出去的版本会让导出包变成空的（踩过一次）
-        val counting = object : OutputStream() {
-            override fun write(b: Int) {
-                bytes++
-                stream.write(b)
-            }
-
-            override fun write(b: ByteArray, off: Int, len: Int) {
-                bytes += len
-                stream.write(b, off, len)
-            }
-
-            override fun flush() = stream.flush()
-
-            // 不替调用方关流：谁打开的谁关（`ZipOutputStream.use` 只会走到这里）
-            override fun close() = stream.flush()
-        }
-        ZipOutputStream(BufferedOutputStream(counting)).use { zip ->
-            zip.putNextEntry(ZipEntry(ENTRY_MANIFEST))
-            zip.write(
-                json.encodeToString(
-                    BackupManifest(
-                        schemaVersion = DB_SCHEMA_VERSION,
-                        appVersion = appVersion,
-                        exportedAt = at,
-                    ),
-                ).toByteArray(),
-            )
-            zip.closeEntry()
-
-            zip.putNextEntry(ZipEntry(ENTRY_DATA))
-            zip.write(json.encodeToString(snapshot).toByteArray())
-            zip.closeEntry()
-
-            // 照片：同一个路径只写一次（两件共用一张图时第二件指的是同一对文件）
-            snapshot.photos.forEach { photo ->
-                putOnce(zip, written, photo.filePath)
-                putOnce(zip, written, photo.thumbPath)
-            }
-        }
-        // 计数用的是"文件对"口径，与"完成"那句话说的同一批
-        BackupSummary(
-            locations = snapshot.locations.size,
-            items = snapshot.items.size,
-            photos = written.count { it.startsWith("${PhotoStore.DIR_ORIGINALS}/") },
-            bytes = bytes,
-        )
-    }
 
     /** 读不到的图**跳过就行**：一张丢失的缩略图不该让整次导出失败（这一条决定了导入侧"缺文件要放行"）。 */
     private fun putOnce(zip: ZipOutputStream, written: MutableSet<String>, relPath: String) {
@@ -119,106 +154,203 @@ class BackupRepository(
         }
     }
 
-    // ————————————————————————— 导入 —————————————————————————
-
-    suspend fun importFrom(stream: InputStream, mode: ImportMode): BackupSummary = withContext(Dispatchers.IO) {
-        // 1 读包（此阶段一张表都还没写过）
-        if (stagingDir.exists()) stagingDir.deleteRecursively()
-        stagingDir.mkdirs()
-        var keep: Set<String>
-        val data: BackupData
-        try {
-            val bundle = readBundle(stream)
-            keep = bundle.keep
-            data = bundle.data
-            validate(data)
-        } catch (t: Throwable) {
-            stagingDir.deleteRecursively()
-            throw t
-        }
-
-        try {
-            // 2 一个事务落库
-            val inserted = runCatching {
-                db.withWriteTransaction<BackupSummary> {
-                    writeRows(data, mode)
-                }
-            }.getOrElse { t ->
-                throw t.toBackupException()
-            }
-
-            // 3 事务成功之后才动磁盘上的照片
-            if (mode == ImportMode.OVERWRITE) removeLocalPhotosNotIn(keep)
-            moveStagedPhotos()
-            BackupSummary(
-                locations = inserted.locations,
-                items = inserted.items,
-                photos = inserted.photos,
-                bytes = 0, // 导入路径不给字节数，界面据 bytes == 0 不显示这一段
-            )
-        } finally {
-            stagingDir.deleteRecursively()
+    /** 加密的同一件事：**条目名当 AAD**，于是把密文换个名字粘过去会验不过。 */
+    private fun putSealed(zip: ZipOutputStream, written: MutableSet<String>, relPath: String, key: SecretKeySpec) {
+        if (!written.add(relPath)) return
+        val file = photoStore.file(relPath)
+        if (!file.isFile) return
+        runCatching {
+            val entryName = "$PHOTO_PREFIX/$relPath"
+            zip.putNextEntry(ZipEntry(entryName))
+            zip.write(BackupCrypto.seal(key, file.readBytes(), entryName))
+            zip.closeEntry()
         }
     }
 
-    private data class Bundle(val data: BackupData, val keep: Set<String>)
+    // ————————————————————————— 导入 —————————————————————————
 
-    private fun readBundle(stream: InputStream): Bundle {
-        var manifest: BackupManifest? = null
-        var data: BackupData? = null
-        var manifestBroken = false
-        var dataBroken = false
-        val keep = HashSet<String>()
+    /**
+     * 读一个包并落库。
+     *
+     * [password] 只在**加密包**上需要（`ADR-27`）；明文包传 null 照旧。
+     * 加密包没给口令抛 [BackupPasswordRequired]、口令不对抛 [BackupWrongPassword]——
+     * 这两种都发生在"一张表都还没写"之前，界面可以拿它决定"弹口令框"还是"报错"。
+     */
+    suspend fun importFrom(stream: InputStream, mode: ImportMode, password: String? = null): BackupSummary =
+        withContext(Dispatchers.IO) {
+            // 1 读包（此阶段一张表都还没写过）
+            if (stagingDir.exists()) stagingDir.deleteRecursively()
+            stagingDir.mkdirs()
+            var keep: Set<String>
+            val data: BackupData
+            try {
+                // 先整包落盘：**manifest 要先读出来才知道要不要口令**，而 SAF 给的流不能回头（`ADR-27`）
+                val pack = File(stagingDir, "pack.zip")
+                stream.use { input -> pack.outputStream().use { input.copyTo(it) } }
 
-        ZipInputStream(BufferedInputStream(stream)).use { zip ->
-            while (true) {
-                val entry = try {
-                    zip.nextEntry ?: break
-                } catch (e: ZipException) {
-                    throw BackupFormatException("这个 zip 读不出来，文件可能坏了")
+                // 顺序与重构前一致：**先报"缺哪个"，再报"解不开"**（`ARCHITECTURE.md` §10.3、既有测试都钉着）
+                val names = entryNamesOf(pack)
+                checkMissing(names)
+
+                val manifest = readManifest(pack)
+                if (manifest.formatVersion > BACKUP_FORMAT_VERSION) {
+                    throw BackupFormatException("这个备份来自更新的版本，先升级应用再导入")
                 }
-                when {
-                    entry.name == ENTRY_MANIFEST -> runCatching {
-                        manifest = json.decodeFromString<BackupManifest>(zip.readBytes().decodeToString())
-                    }.onFailure { manifestBroken = true }
+                val key = manifest.encryption?.let { enc -> keyFor(enc, password) }
 
-                    entry.name == ENTRY_DATA -> runCatching {
-                        data = json.decodeFromString<BackupData>(zip.readBytes().decodeToString())
-                    }.onFailure { dataBroken = true }
+                val bundle = readEntries(pack, key)
+                keep = bundle.keep
+                data = bundle.data
+                validate(data)
+            } catch (t: Throwable) {
+                stagingDir.deleteRecursively()
+                throw t
+            }
 
-                    isPhotoEntry(entry.name) -> {
-                        val rel = entry.name.removePrefix("$PHOTO_PREFIX/")
-                        val target = File(stagingDir, rel)
-                        target.parentFile?.mkdirs()
-                        target.outputStream().use { zip.copyTo(it) }
-                        keep.add(rel)
+            try {
+                // 2 一个事务落库
+                val inserted = runCatching {
+                    db.withWriteTransaction<BackupSummary> {
+                        writeRows(data, mode)
                     }
-
-                    // 目录条目与白名单外的条目：目录放行，别的文件名一律拒
-                    !entry.isDirectory -> throw BackupFormatException("备份里有不合法的文件名：${entry.name}")
+                }.getOrElse { t ->
+                    throw t.toBackupException()
                 }
-                zip.closeEntry()
+
+                // 3 事务成功之后才动磁盘上的照片
+                if (mode == ImportMode.OVERWRITE) removeLocalPhotosNotIn(keep)
+                moveStagedPhotos()
+                BackupSummary(
+                    locations = inserted.locations,
+                    items = inserted.items,
+                    photos = inserted.photos,
+                    bytes = 0, // 导入路径不给字节数，界面据 bytes == 0 不显示这一段
+                )
+            } finally {
+                stagingDir.deleteRecursively()
             }
         }
 
+    private data class Bundle(val data: BackupData, val keep: Set<String>)
+
+    /** 包里的条目名（先看有没有缺东西，再谈解不解得开）。 */
+    private fun entryNamesOf(pack: File): Set<String> = try {
+        ZipFile(pack).use { zip ->
+            zip.entries().iterator().asSequence().mapTo(HashSet()) { it.name }
+        }
+    } catch (e: ZipException) {
+        throw BackupFormatException("这个 zip 读不出来，文件可能坏了")
+    }
+
+    /**
+     * 缺哪个报哪个（`RULES.md` §12.3）：**只报第一个缺的**（`ARCHITECTURE.md` §10.3 的口径）。
+     * 加密包的负载叫 `data.enc`，所以两个名字有一个在就不算缺。
+     */
+    private fun checkMissing(names: Set<String>) {
         val missing = buildList {
-            if (manifest == null && !manifestBroken) add(ENTRY_MANIFEST)
-            if (data == null && !dataBroken) add(ENTRY_DATA)
+            if (ENTRY_MANIFEST !in names) add(ENTRY_MANIFEST)
+            if (ENTRY_DATA !in names && ENTRY_DATA_ENC !in names) add(ENTRY_DATA)
         }
         if (missing.isNotEmpty()) {
-            throw BackupFormatException("这不是 Wheremy 的备份包：少了 ${missing.joinToString("、")}")
+            throw BackupFormatException("这不是 Wheremy 的备份包：少了 ${missing.first()}")
         }
-        if (manifestBroken) throw BackupFormatException("备份的 manifest.json 读不出来")
-        // 这一句是"包被截断"唯一的线索，要留着
-        if (dataBroken) throw BackupFormatException("备份的 data.json 读不出来，文件可能被截断了")
+    }
 
-        val m = manifest!!
+    /** 口令 → 密钥。**没说口令就说清楚要口令，口令不对就说口令不对**——都不说成"文件坏了"。 */
+    private fun keyFor(enc: BackupEncryption, password: String?): SecretKeySpec {
+        if (password == null) throw BackupPasswordRequired()
+        val key = BackupCrypto.deriveKey(password, BackupCrypto.fromBase64(enc.saltBase64), enc.iterations)
+        if (!BackupCrypto.verifierOk(key, BackupCrypto.fromBase64(enc.verifierBase64))) throw BackupWrongPassword()
+        return key
+    }
+
+    /** 读 manifest：**它永远明文**，因为读的人要先知道"这个包要不要口令"（`ADR-27`）。 */
+    private fun readManifest(pack: File): BackupManifest {
+        val text = try {
+            ZipFile(pack).use { zip ->
+                val entry = zip.getEntry(ENTRY_MANIFEST)
+                    ?: throw BackupFormatException("这不是 Wheremy 的备份包：少了 $ENTRY_MANIFEST")
+                zip.getInputStream(entry).use { it.readBytes().decodeToString() }
+            }
+        } catch (e: ZipException) {
+            throw BackupFormatException("这个 zip 读不出来，文件可能坏了")
+        }
+        val manifest = runCatching { json.decodeFromString<BackupManifest>(text) }
+            .getOrElse { throw BackupFormatException("备份的 manifest.json 读不出来") }
         // 第五道拒（不在 validate 里）：此时一张表都还没写过，语义与"数据包不合格"不同
-        if (m.schemaVersion > DB_SCHEMA_VERSION) {
+        if (manifest.schemaVersion > DB_SCHEMA_VERSION) {
             throw BackupFormatException(
-                "这个备份来自更新的版本（schema ${m.schemaVersion} > $DB_SCHEMA_VERSION），先升级应用再导入",
+                "这个备份来自更新的版本（schema ${manifest.schemaVersion} > $DB_SCHEMA_VERSION），先升级应用再导入",
             )
         }
+        return manifest
+    }
+
+    /** 读负载（明文直读、加密包逐条目解密）+ 把照片落到 staging。 */
+    private fun readEntries(pack: File, key: SecretKeySpec?): Bundle {
+        var data: BackupData? = null
+        var dataBroken = false
+        val keep = HashSet<String>()
+
+        try {
+            ZipFile(pack).use { zip ->
+                val entries = zip.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    when {
+                        entry.name == ENTRY_MANIFEST -> Unit // 上面读过了
+
+                        entry.name == ENTRY_DATA -> {
+                            if (key != null) {
+                                // 加密包里混进明文负载：与其猜，不如拒——这多半是有人把两个包拼错了
+                                throw BackupFormatException("这个加密包里混进了明文的内容，导入已取消")
+                            }
+                            runCatching {
+                                data = json.decodeFromString<BackupData>(
+                                    zip.getInputStream(entry).use { it.readBytes().decodeToString() },
+                                )
+                            }.onFailure { dataBroken = true }
+                        }
+
+                        entry.name == ENTRY_DATA_ENC -> {
+                            val k = key ?: throw BackupPasswordRequired()
+                            // 解密失败（被改过/没口令）要原样报出来，不能被下面的 JSON 解析吞掉
+                            val plain = BackupCrypto.open(
+                                k,
+                                zip.getInputStream(entry).use {
+                                    it.readBytes()
+                                },
+                                ENTRY_DATA_ENC,
+                            )
+                            runCatching { data = json.decodeFromString<BackupData>(plain.decodeToString()) }
+                                .onFailure { dataBroken = true }
+                        }
+
+                        isPhotoEntry(entry.name) -> {
+                            val rel = entry.name.removePrefix("$PHOTO_PREFIX/")
+                            val target = File(stagingDir, rel)
+                            target.parentFile?.mkdirs()
+                            val payload = zip.getInputStream(entry).use { it.readBytes() }
+                            val bytes = if (key == null) payload else BackupCrypto.open(key, payload, entry.name)
+                            target.outputStream().use { it.write(bytes) }
+                            keep.add(rel)
+                        }
+
+                        // 目录条目与白名单外的条目：目录放行，别的文件名一律拒
+                        !entry.isDirectory -> throw BackupFormatException("备份里有不合法的文件名：${entry.name}")
+                    }
+                }
+            }
+        } catch (e: ZipException) {
+            throw BackupFormatException("这个 zip 读不出来，文件可能坏了")
+        }
+
+        if (data == null && !dataBroken) {
+            val expected = if (key == null) ENTRY_DATA else ENTRY_DATA_ENC
+            throw BackupFormatException("这不是 Wheremy 的备份包：少了 $expected")
+        }
+        // 这一句是"包被截断"唯一的线索，要留着
+        if (dataBroken) throw BackupFormatException("备份的 data.json 读不出来，文件可能被截断了")
         return Bundle(data!!, keep)
     }
 

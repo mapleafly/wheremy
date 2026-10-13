@@ -17,6 +17,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -53,6 +54,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.wheremy.app.data.backup.BackupCrypto
 import com.wheremy.app.data.backup.ImportMode
 import com.wheremy.app.data.settings.SettingsRepository
 import com.wheremy.app.data.settings.WordListKind
@@ -80,18 +82,37 @@ fun SettingsScreen(
     // ⚠️ `pendingMode` 在回调的**第一行**就被清空：一次选择只兑现一次导入，重来必须重新点按钮。
     // 导入的 MIME 用通配（**不按 zip 收窄**）：选中的任何文件都交给读包阶段去判。
     var pendingMode by remember { mutableStateOf<ImportMode?>(null) }
+    // 导入时被要口令（FR-BAK-09）：记住"谁在问"，重试才接得上（uri 已经在回调里拿到手了）
+    var pendingImport by remember { mutableStateOf<Pair<ImportMode, () -> java.io.InputStream?>?>(null) }
+    var importPassword by remember { mutableStateOf("") }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val mode = pendingMode
         pendingMode = null
         if (uri != null && mode != null) {
-            vm.importBackup(mode) { context.contentResolver.openInputStream(uri) }
+            val open = { context.contentResolver.openInputStream(uri) }
+            pendingImport = mode to open
+            vm.importBackup(mode, open, password = null)
         }
     }
+    // 导出前先问口令（ADR-27）：口令得在开 SAF **之前**定下来，不然包都建好了才发现要加密
+    var exportDialog by remember { mutableStateOf(false) }
+    var exportAsking by remember { mutableStateOf(false) }
+    var exportPassword by remember { mutableStateOf("") }
+    var exportPasswordAgain by remember { mutableStateOf("") }
+    var exportRemember by remember { mutableStateOf(true) }
+    var exportPasswordError by remember { mutableStateOf<String?>(null) }
+    var pendingExport by remember { mutableStateOf<Pair<String?, Boolean>?>(null) }
     val exporter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip"),
     ) { uri ->
+        val pending = pendingExport
+        pendingExport = null
         if (uri != null) {
-            vm.exportBackup { context.contentResolver.openOutputStream(uri) }
+            vm.exportBackup(
+                open = { context.contentResolver.openOutputStream(uri) },
+                password = pending?.first,
+                remember = pending?.second == true,
+            )
         }
     }
 
@@ -296,7 +317,14 @@ fun SettingsScreen(
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
                         OutlinedButton(
-                            onClick = { exporter.launch("wheremy-backup-${LocalDate.now()}.zip") },
+                            onClick = {
+                                // 先问口令（ADR-27），SAF 在选择之后
+                                exportAsking = false
+                                exportPassword = ""
+                                exportPasswordAgain = ""
+                                exportPasswordError = null
+                                exportDialog = true
+                            },
                             enabled = !state.busy,
                         ) { Text("导出到文件") }
                         OutlinedButton(
@@ -356,6 +384,21 @@ fun SettingsScreen(
                             onClick = vm::exportNow,
                             enabled = !state.autoExportBusy,
                         ) { Text("立刻导出一份") }
+                    }
+                    // 自动导出到底导的是明文还是加密包（UI.md §7.10）：这句话不许含糊
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (state.backupPassword.isEmpty()) {
+                                "自动导出导的是明文包（没设口令）。"
+                            } else {
+                                "自动导出会用这台手机上记住的口令加密。"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f).testTag("settings_backup_password_line"),
+                        )
+                        if (state.backupPassword.isNotEmpty()) {
+                            TextButton(onClick = vm::clearBackupPassword) { Text("改用明文") }
+                        }
                     }
                     Text(
                         text = state.autoExportUriLine,
@@ -429,6 +472,125 @@ fun SettingsScreen(
                 ) { Text("确定覆盖导入") }
             },
             dismissButton = { TextButton(onClick = { confirmOverwrite = false }) { Text("取消") } },
+        )
+    }
+
+    // 导出前问口令（`FR-BAK-09` / `ADR-27` / `UI.md` §7.10）：两步——先选要不要加密，再输口令。
+    if (exportDialog) {
+        AlertDialog(
+            onDismissRequest = { exportDialog = false },
+            title = { Text(if (exportAsking) "给这个备份设个口令" else "给这个备份加个口令？") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
+                    Text(
+                        if (exportAsking) {
+                            "忘了口令这个包就永远打不开；但原库还在手机上，随时能重新导一份。"
+                        } else {
+                            "加了口令，包放进网盘也不怕被人看到。不加密也行——那样任何旧版本都能导入。"
+                        },
+                    )
+                    if (exportAsking) {
+                        OutlinedTextField(
+                            value = exportPassword,
+                            onValueChange = {
+                                exportPassword = it
+                                exportPasswordError = null
+                            },
+                            label = { Text("口令（至少 8 位）") },
+                            singleLine = true,
+                            modifier = Modifier.testTag("export_password"),
+                        )
+                        OutlinedTextField(
+                            value = exportPasswordAgain,
+                            onValueChange = {
+                                exportPasswordAgain = it
+                                exportPasswordError = null
+                            },
+                            label = { Text("再输一遍") },
+                            singleLine = true,
+                            modifier = Modifier.testTag("export_password_again"),
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = exportRemember, onCheckedChange = { exportRemember = it })
+                            Text("在这台手机上记住（自动导出用）")
+                        }
+                        exportPasswordError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (!exportAsking) {
+                            exportAsking = true
+                        } else if (exportPassword.length < BackupCrypto.MIN_PASSWORD_LENGTH) {
+                            exportPasswordError = "口令至少 ${BackupCrypto.MIN_PASSWORD_LENGTH} 位"
+                        } else if (exportPassword != exportPasswordAgain) {
+                            exportPasswordError = "两次输入的口令不一样"
+                        } else {
+                            pendingExport = exportPassword to exportRemember
+                            exportDialog = false
+                            exporter.launch("wheremy-backup-${LocalDate.now()}.zip")
+                        }
+                    },
+                    enabled = !exportAsking || exportPassword.isNotEmpty(),
+                ) { Text(if (exportAsking) "加密导出" else "加密导出") }
+            },
+            dismissButton = {
+                Row {
+                    if (!exportAsking) {
+                        TextButton(
+                            onClick = {
+                                pendingExport = null to false
+                                exportDialog = false
+                                exporter.launch("wheremy-backup-${LocalDate.now()}.zip")
+                            },
+                        ) { Text("不加密导出") }
+                    }
+                    TextButton(onClick = { exportDialog = false }) { Text("取消") }
+                }
+            },
+        )
+    }
+
+    // 导入遇到加密包（`UI.md` §7.10）：问口令，输错就留在框里重试
+    if (state.needImportPassword) {
+        AlertDialog(
+            onDismissRequest = {
+                vm.cancelImportPassword()
+                pendingImport = null
+            },
+            title = { Text("这个备份包加密了") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(WheremySpacing.sm)) {
+                    Text("请输入当初设的那个口令")
+                    OutlinedTextField(
+                        value = importPassword,
+                        onValueChange = { importPassword = it },
+                        label = { Text("口令") },
+                        singleLine = true,
+                        modifier = Modifier.testTag("import_password"),
+                    )
+                    state.importPasswordError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val pending = pendingImport ?: return@TextButton
+                        vm.importBackup(pending.first, pending.second, password = importPassword)
+                    },
+                ) { Text("导入") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        vm.cancelImportPassword()
+                        pendingImport = null
+                        importPassword = ""
+                    },
+                ) { Text("取消") }
+            },
         )
     }
 }
