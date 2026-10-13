@@ -144,7 +144,7 @@
 | `W1–W11` | 已知偏差编号：代码这么写了、但不完全成立 | `RULES.md` §15、`UI.md` §14 |
 | `FR-<域>-<序号>` | 需求 id；`ARCHITECTURE.md`/`RULES.md`/`UI.md`/`REBUILD.md` 用它反向引用 | `PRD.md` §0 |
 | `D1–D14` | 明确否决项编号与理由（如 ⛔D4 不做动态取色） | `PRD.md` §6 |
-| `ADR-01 … ADR-25` | 架构决策记录；写法 `ADR-04 ← PRD ⛔D4` 表示它由哪条否决项成文。ADR-25 是**技术选型准则**（官方/成熟优先、自造要给证据） | `DECISIONS.md` §3/§4 |
+| `ADR-01 … ADR-27` | 架构决策记录；写法 `ADR-04 ← PRD ⛔D4` 表示它由哪条否决项成文。ADR-25 是**技术选型准则**（官方/成熟优先、自造要给证据） | `DECISIONS.md` §3/§4 |
 | `G1–G5` | 五条可测的成功判据 | `PRD.md` §1.1 |
 | `M0–M7` | 从零重建的里程碑切分，出口判据过了才进下一个；M7 是**发布就绪**（⭐真实 Migration + ⭐签名包 + 发布演练，`PROJECT.md` §5） | `REBUILD.md` §3、`PROJECT.md` §5 |
 | 批次号（AT/AU、AK、AA…） | 真机验收与修复的批次标签；规则里写"哪一批的事故"就指它 | 引用散见 `RULES.md` §15、`UI.md` §14、`PRD.md`；历史记录在 `docs/superpowers/plans/`（**只读存档**，不参与裁决，`README.md` §8） |
