@@ -23,6 +23,14 @@ Android 应用，**没有账号、没有云、没有服务端**：数据只在�
   不填也能用——它只是省打字。
 - **备份**：导出成一个 zip（**可以加口令加密**），换手机时导进去；支持合并导入与覆盖导入。
 
+## 下载安装
+
+**发布包在这里：[Releases](https://github.com/mapleafly/wheremy/releases)**（APK + `SHA256SUMS.txt`）。
+装之前可以自己核一遍：`sha256sum -c SHA256SUMS.txt`（Windows：`Get-FileHash .\wheremy-0.1.0-release.apk -Algorithm SHA256`）。
+
+包是用发布者自己的 keystore 签的（证书 SHA-256 `8118b97d588e43c91a77540154fda366749e0111f1bafd2765ee7a47676b8369`）——
+这意味着**它没法覆盖安装别人签名的同名应用**，也意味着**别人签的包盖不了它**。
+
 ## 怎么构建
 
 需要 JDK 21 与 Android SDK（`compileSdk 37` / `targetSdk 36` / `minSdk 26`）：
@@ -52,6 +60,11 @@ Android 应用，**没有账号、没有云、没有服务端**：数据只在�
 | [`docs/RELEASE.md`](docs/RELEASE.md) | 发布清单与全部验收证据 |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | 每个取舍为什么这么定（ADR） |
 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | 每轮改了什么、为什么 |
+
+## 许可
+
+**源码公开，但保留所有权利**（没有 LICENSE 文件＝默认状态）：你可以阅读、克隆、自己构建来用，
+但**不得复制再发布**（包括改名后重新分发 APK）。想要别的授权方式，开个 issue 谈。
 
 ## 隐私
 

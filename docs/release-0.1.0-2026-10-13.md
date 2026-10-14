@@ -12,6 +12,7 @@
 | commit | 本记录所在提交见 git 历史；**归档的那个包由 `e81a5fb` 构建**（依据：APK 内 `META-INF/version-control-info.textproto`）。**2026-10-14 重新归档过一次**：`FR-SRC-08` 与 `FR-BAK-09` 落地后重构建，与真机验收那次（`b5d6d5b`）在 **`app/src/main` 上逐字节相同**（`git diff --stat b5d6d5b e81a5fb -- app/src/main` 为空），所以 §10.6–§10.8.1 的验收结论对这一个包同样成立；新包另做了装机的两处冒烟（多图界面 + 加密那行状态，都在） |
 | 发布物文件名 + SHA-256 | **`wheremy-0.1.0-release.apk`**，**2,763,109 字节**，`05005413a2ef85014724e6e9bb99a11f3e0f50aea603bdd0d8d80d27f3e3ddd5`（2026-10-14 重建版；旧版 2,746,725 字节 / `05d0ebd179b995570486c1d457f69cfbf8b0f21ff5b44ae2951bfdac1743703e` 已被它取代） |
 | 签名摘要 | DN `CN=Wheremy, OU=Personal, O=Wheremy, L=Beijing, ST=Beijing, C=CN`；证书 SHA-256 `8118b97d588e43c91a77540154fda366749e0111f1bafd2765ee7a47676b8369`；`apksigner verify` 无输出＝通过 |
+| **对外发布物**（GitHub Releases） | `wheremy-0.1.0-release.apk`，2,763,109 字节，SHA-256 `dd8a1aa22febfc262b48676d2b3ebca39c10a522116290af2e1c6455831c27eb`；由 CI 从标签 `v0.1.0` 构建并签名（run `38506779304`，全绿），随 `SHA256SUMS.txt` 一起挂在 https://github.com/mapleafly/wheremy/releases/tag/v0.1.0 —— 与本地归档包同代码、不同哈希（APK 不可字节复现） |
 | 归档位置 | **`artifacts/release/0.1.0/`**（APK + `SHA256SUMS.txt` + `README.md`）；**不进 git**，哈希与证据在 `RELEASE.md` §10.10 |
 | 发布负责人 / 日期 | **用户本人 / 2026-10-14**（软件经理＝用户本人，只有他持 keystore；本次发布按此签字生效） |
 | 给谁、怎么给（侧载渠道） | **自用侧载**（2026-10-14 用户定）：只有用户自己一台机器在用，包在 `artifacts/release/0.1.0/`，手机上装的就是它。**对外分发是下一步，不是这一次**：用户 2026-10-14 表示想给别人用，路线与待办见 `RELEASE.md` §9.1（用 CI 出签名包 + 选分发渠道） |

@@ -418,8 +418,19 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
 ### 9.1 对外分发（"想给别人用"，2026-10-14 用户提出）
 
 **现状（2026-10-14 更新）**：0.1.0 按**自用侧载**签收（发布记录），**对外分发选渠道 A**「仓库转公开 + GitHub Releases」（用户 2026-10-14 定）。已做：仓库根目录补了面向陌生人的 `README.md`。
-**还差**：① 用户配四个 secret（`KEYSTORE.md` §13）② LICENSE 待用户定（不写＝保留所有权利，是保守默认）
-③ 配完 secret 后派发一次 `Release APK`，确认能出签名包；④ 打 `v0.1.0` 标签发第一个 Release。
+**2026-10-14 已全部打通**（用户配好三个 secret 后）：
+
+| 步 | 证据 |
+|---|---|
+| ① 三个 secret 配好 | `gh secret list` 可见 `KEYSTORE_BASE64` / `KEYSTORE_KEY_PASSWORD` / `KEYSTORE_STORE_PASSWORD` |
+| ② 手动派发一次出签名包 | run `38506495467` 全绿；产物 `wheremy-0.1.0-release.apk` 2,763,109 字节，SHA-256 `57b424af…`，证书 `8118b97d588e43c9…` |
+| ③ 该包装真机冒烟 | 装到小米 13 上跑起来，设置页「导出到文件」与「自动导出会用这台手机上记住的口令加密。」都在 |
+| ④ 打标签发 Release | `v0.1.0` → run `38506779304` 全绿（含「发 Release」步）→ https://github.com/mapleafly/wheremy/releases/tag/v0.1.0 |
+| ⑤ 发布物自查 | 从 Release 下载回来重算：APK SHA-256 `dd8a1aa22febfc262b48676d2b3ebca39c10a522116290af2e1c6455831c27eb` 与 `SHA256SUMS.txt` **一致** ✓；证书仍是发布者那张 ✓ |
+
+**途中修掉的一个真 bug**：run `38506064573` 卡在「验签」步——runner 的 apksigner 是 build-tools 37，输出格式是 `V2 Signer: certificate SHA-256 digest:`，而断言按本机 36 的 `Signer #1 certificate SHA-256 digest:` 写的，取到空值 → 误判失败（保险丝拦住了，没发出去；日志里的指纹其实是对的）。已改成两种格式都认，并在解析为空时单独报错，免得下次把「解析失败」误报成「证书不对」。
+
+**LICENSE**：用户 2026-10-14 决定**不加**（＝保留所有权利）。`README.md` 里写明了这条，免得外人以为公开＝随便拿去再发布。
 
 原计划要补的几件（存档）：
 
@@ -463,6 +474,7 @@ Windows 用户名（6 个）、keystore 路径 `D:\keys\…`（6 个）、本机
 | 项 | 值 |
 |---|---|
 | release APK | `app-release.apk`，**2,691,833 字节**，SHA-256 `B13EB88EDE264F77DC178F29382F7553A9A29DE06C0DCC3A2D1D49C712CE848B`（R8 + 资源收缩） |
+| **对外发布的包**（GitHub Releases） | `wheremy-0.1.0-release.apk`，2,763,109 字节，SHA-256 `DD8A1AA22FEBFC262B48676D2B3EBCA39C10A522116290AF2E1C6455831C27EB` —— 由 **CI** 从标签 `v0.1.0` 构建并签名（run `38506779304`），与上面那个本地归档包**同代码不同哈希**（APK 不可字节复现，见下面的坑①）；`SHA256SUMS.txt` 与它一致 ✓ |
 | debug APK | `app-debug.apk`，17,380,427 字节，SHA-256 `4C1615E9C42C9B55ADEE04CCD8CA2315F9A38A798CAA87B410240F7707A293A0` |
 | 版本 | `versionCode 1` / `versionName 0.1.0`；`minSdk 26` / `targetSdk 36` / `compileSdk 37` |
 | 签名 | ⚠️ **调试签名**（⭐FR-RLS-01 未完成，§3.2）；能装能跑，不能作为正式交付 |

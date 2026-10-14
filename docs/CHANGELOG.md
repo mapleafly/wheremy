@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-10-14 · 发布管道打通：CI 出签名包 → 真机冒烟 → Release 上线
+
+用户配好三个 secret 之后，整条路当天打通（证据都在 `RELEASE.md` §9.1）：
+
+| 步 | 结果 |
+|---|---|
+| 手动派发 | run `38506495467` **全绿**：还原 keystore → `assembleRelease` → **验签指纹通过** → 算哈希 → 上传产物 |
+| 真机冒烟 | 把 CI 产出的包装到小米 13 上：跑起来、设置页「导出到文件」与「自动导出会用这台手机上记住的口令加密。」都在 |
+| 打标签 | `v0.1.0` → run `38506779304` 全绿（含「发 Release」步）→ https://github.com/mapleafly/wheremy/releases/tag/v0.1.0 |
+| 发布物自查 | 从 Release 下载回来重算：APK SHA-256 `dd8a1aa2…` 与 `SHA256SUMS.txt` **一致** ✓；证书仍是发布者那张 `8118b97d…` ✓ |
+
+**途中修掉一个真 bug**：第一次派发（run `38506064573`）卡在「验签」步——runner 的 apksigner 是
+**build-tools 37**，输出格式是 `V2 Signer: certificate SHA-256 digest:`，而我的断言按本机 36 的
+`Signer #1 certificate SHA-256 digest:` 写的，`grep` 取到空值 → 误判失败。保险丝拦住了（**没有**发出任何包），
+而且日志里打印的指纹其实是对的。已改成两种格式都认，并在解析为空时单独报错——免得下次把「解析失败」误报成「证书不对」。
+
+**顺带实证了文档里那条**「APK 不是字节可复现的」：同一份代码三次构建三个哈希
+（本地 `05005413…` / run 38506495467 `57b424af…` / 发布 `dd8a1aa2…`），大小都是 2,763,109 字节。
+
+**LICENSE**：用户 2026-10-14 决定**不加**（保留所有权利）；`README.md` 补了「下载安装」与「许可」两节，
+写明公开的是源码、APK 可以给朋友装，但不得复制再发布。
+
+---
+
 ## 2026-10-14 · 仓库转公开（渠道 A）：先扫一遍，再翻开关 —— **已执行**
 
 > **2026-10-14 执行完毕**：`gh repo edit --visibility public`，仓库现为 **PUBLIC**（https://github.com/mapleafly/wheremy）。翻转后核对：README 已被 GitHub 识别（3,656 字节）、描述与八个主题已填（android / jetpack-compose / kotlin / room / local-first / offline-first / material3 / hilt）、CI 在新提交上仍然全绿（run 38502060420，1m41s）。**LICENSE 仍为「无」**（＝保留所有权利，等用户定）。附带的好处：公开仓库的 Actions 分钟数免费，GitHub 还会默认开 secret scanning——多一道安全网。
