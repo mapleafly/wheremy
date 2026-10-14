@@ -135,9 +135,18 @@ jobs:
         run: |
           TAG="${{ inputs.tag }}"
           [ -n "$TAG" ] || TAG="${GITHUB_REF_NAME}"
-          NOTES=$(sed -n '1,40p' docs/CHANGELOG.md)
+          # 说明的来源：优先用那份发布记录（`docs/release-<版本>-*.md`），没有才退回 CHANGELOG 头部。
+          # ⚠️ 第一次（v0.1.0）用的是 CHANGELOG 头部，结果写的是"仓库转公开"那节——与下载的人无关，
+          #    事后手动改了。以后发版请先写/更新发布记录，再打标签。
+          NOTES_FILE=$(ls docs/release-${VERSION}-*.md 2>/dev/null | head -1)
+          if [ -n "$NOTES_FILE" ]; then
+            echo "用发布记录当说明：$NOTES_FILE"
+            set -- --notes-file "$NOTES_FILE"
+          else
+            echo "没有 docs/release-${VERSION}-*.md，退回 CHANGELOG 头部（记得下次先写发布记录）"
+            sed -n '1,40p' docs/CHANGELOG.md > /tmp/notes.md
+            set -- --notes-file /tmp/notes.md
+          fi
           # 标签不存在时 gh 会顺手建一个；已存在同名 Release 时退化成"补传文件"
-          gh release create "$TAG" "$OUT" SHA256SUMS.txt \
-            --title "wheremy $VERSION" \
-            --notes "$NOTES" || \
+          gh release create "$TAG" "$OUT" SHA256SUMS.txt --title "wheremy $VERSION" "$@" || \
           gh release upload "$TAG" "$OUT" SHA256SUMS.txt --clobber
