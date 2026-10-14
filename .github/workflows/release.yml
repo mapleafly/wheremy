@@ -93,8 +93,16 @@ jobs:
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
           echo "用 $APKSIGNER"
           "$APKSIGNER" verify --print-certs "$APK"
+          # ⚠️ apksigner 的输出格式随 build-tools 变：36 是 `Signer #1 certificate SHA-256 digest:`，
+          #    37 是 `V2 Signer: certificate SHA-256 digest:`。只认一种会在 runner 上取到空值 → 误判失败
+          #    （2026-10-14 真踩过：run 38506064573 就是这么红的，日志里指纹其实是对的）。
           CERT=$("$APKSIGNER" verify --print-certs "$APK" \
-            | grep 'Signer #1 certificate SHA-256 digest' | awk '{print $NF}' | tr 'A-Z' 'a-z')
+            | grep -E '(Signer #1|V[0-9]+ Signer): certificate SHA-256 digest' \
+            | head -1 | awk '{print $NF}' | tr 'A-Z' 'a-z')
+          if [ -z "$CERT" ]; then
+            echo "::error::没能从 apksigner 输出里解析出证书指纹——先看上面那几行输出，再改这条 grep"
+            exit 1
+          fi
           if [ "$CERT" != "$EXPECTED_CERT" ]; then
             echo "::error::签名证书不对：拿到 $CERT，期望 $EXPECTED_CERT —— keystore 配错了，别发这个包"
             exit 1
