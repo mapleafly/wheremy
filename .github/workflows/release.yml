@@ -1,0 +1,135 @@
+name: Release APK
+
+# 用 CI 出**真正签名**的发布包（对外分发用；日常门禁是 ci.yml，别混淆）。
+#
+# 触发：
+#   - 手动 dispatch（可选填一个 tag：填了就顺手发一个 Release）
+#   - 推 `v*` 标签（例如 `git tag v0.1.0 && git push origin v0.1.0`）
+#
+# ⚠️ 需要四个仓库 secret（配法见 `docs/KEYSTORE.md` §13）。**缺任何一个，这个工作流会明确失败**——
+#    这是故意的：Gradle 找不到 `keystore.properties` 时会**退回调试签名**（`app/build.gradle.kts` 里写着），
+#    那样产出的"发布包"是假货，装到别人手机上将来也没法用同一个 keystore 覆盖升级。
+#
+# ⚠️ 私有仓库的 Release **只有协作者看得见**：想公开分发，要么把仓库转公开，要么把 APK 放到别处（见 `RELEASE.md` §9）。
+#
+# action 版本与 ci.yml 保持一致（都是 2026-10-10 核对过存在的大版本）。
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '标签名（例如 v0.1.0）；留空只出包不发 Release'
+        required: false
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+# 发 Release 要写权限；其余一律只读
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # 这张证书的指纹是**公开信息**（写在发布记录里），拿来当"配错 keystore"的保险丝
+      EXPECTED_CERT: 8118b97d588e43c91a77540154fda366749e0111f1bafd2765ee7a47676b8369
+      KEY_ALIAS: wheremy-release
+    steps:
+      - name: 检出
+        uses: actions/checkout@v6
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: 准备 Gradle（含缓存）
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 检查密钥齐不齐（缺就失败，不产"假发布包"）
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "$KEYSTORE_BASE64" ] || missing="$missing KEYSTORE_BASE64"
+          [ -n "$STORE_PASSWORD" ] || missing="$missing KEYSTORE_STORE_PASSWORD"
+          [ -n "$KEY_PASSWORD" ] || missing="$missing KEYSTORE_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::缺少 secret：$missing"
+            echo "配法：docs/KEYSTORE.md §13（一次性配好四个 secret）"
+            echo "本工作流故意失败：没有 keystore 时 Gradle 会退回调试签名，那种包不能对外发。"
+            exit 1
+          fi
+          echo "四个 secret 都在。"
+
+      - name: 还原 keystore 与 keystore.properties（都写在仓库外）
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
+        run: |
+          # 仓库父目录 = app/build.gradle.kts 找 `../keystore.properties` 的第一个位置
+          echo "$KEYSTORE_BASE64" | base64 -d > "$GITHUB_WORKSPACE/../wheremy-release.jks"
+          {
+            echo "storeFile=$GITHUB_WORKSPACE/../wheremy-release.jks"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > "$GITHUB_WORKSPACE/../keystore.properties"
+          echo "keystore 与 properties 已就位（内容不打印）。"
+
+      - name: 出包（R8 + 资源收缩）
+        run: ./gradlew :app:assembleRelease --console=plain
+
+      - name: 验签（证书必须是发布记录里那张）
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
+          echo "用 $APKSIGNER"
+          "$APKSIGNER" verify --print-certs "$APK"
+          CERT=$("$APKSIGNER" verify --print-certs "$APK" \
+            | grep 'Signer #1 certificate SHA-256 digest' | awk '{print $NF}' | tr 'A-Z' 'a-z')
+          if [ "$CERT" != "$EXPECTED_CERT" ]; then
+            echo "::error::签名证书不对：拿到 $CERT，期望 $EXPECTED_CERT —— keystore 配错了，别发这个包"
+            exit 1
+          fi
+          echo "签名者证书对得上：$CERT"
+
+      - name: 算哈希、改名、写 SHA256SUMS
+        run: |
+          VERSION=$(grep -m1 'versionName = ' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
+          APK=app/build/outputs/apk/release/app-release.apk
+          OUT="wheremy-$VERSION-release.apk"
+          cp "$APK" "$OUT"
+          sha256sum "$OUT" | tee SHA256SUMS.txt
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "OUT=$OUT" >> "$GITHUB_ENV"
+
+      - name: 上传产物（APK + 哈希）
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheremy-release-${{ github.run_number }}
+          path: |
+            wheremy-*-release.apk
+            SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: 发 Release（只在推标签时；私有仓库只有协作者可见）
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.tag }}"
+          [ -n "$TAG" ] || TAG="${GITHUB_REF_NAME}"
+          NOTES=$(sed -n '1,40p' docs/CHANGELOG.md)
+          # 标签不存在时 gh 会顺手建一个；已存在同名 Release 时退化成"补传文件"
+          gh release create "$TAG" "$OUT" SHA256SUMS.txt \
+            --title "wheremy $VERSION" \
+            --notes "$NOTES" || \
+          gh release upload "$TAG" "$OUT" SHA256SUMS.txt --clobber

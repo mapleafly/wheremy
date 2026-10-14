@@ -281,6 +281,100 @@ release 的 `applicationId` 是 `com.wheremy.app`，而你手机上那个参照�
 
 ---
 
+## 13. 用 CI 出签名包（`FR-RLS-02` 的一半：对外分发用）
+
+**能不能用 CI 生成签名包**：能。`.github/workflows/release.yml` 已经写好，**但默认关着**——
+它只在「手动 dispatch」或「推 `v*` 标签」时跑，日常门禁还是 `ci.yml`，互不干扰。
+
+**为什么要四个 secret 才能跑**：Gradle 找不到 `keystore.properties` 时会**退回调试签名**
+（`app/build.gradle.kts` 的注释写着），那样产出的"发布包"是**假货**——装到别人手机上，
+将来用真 keystore 的升级包**覆盖不了**（`KEYSTORE.md` §8：换密钥＝换应用）。
+所以那个工作流**缺 secret 就直接红**，宁可不出包，也不出假包。
+
+### 13.1 要配的四个 secret（仓库 → Settings → Secrets and variables → Actions）
+
+| Secret 名 | 值从哪来 |
+|---|---|
+| `KEYSTORE_BASE64` | 把 `D:\keys\wheremy-release.jks` 转成一行 base64（命令见下） |
+| `KEYSTORE_STORE_PASSWORD` | `keystore.properties` 里的 `storePassword` |
+| `KEYSTORE_KEY_PASSWORD` | 同上的 `keyPassword`（PKCS12 里与 store 口令相同） |
+| （别名不设 secret） | 工作流里写死 `wheremy-release`，与 `KEYSTORE.md` §4 一致 |
+
+Windows 上转 base64（**输出是一行**，别带换行）：
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('D:\keys\wheremy-release.jks')) | Set-Clipboard
+# 然后粘进 GitHub 的 secret 输入框
+```
+
+### 13.2 跑一次
+
+```
+Actions → Release APK → Run workflow（tag 留空 = 只出包不发 Release）
+# 或者：git tag v0.1.0 && git push origin v0.1.0   ← 顺手发一个 Release
+```
+
+工作流会做五件事：还原 keystore（写在**仓库外**，与本地同一套查找路径）→ `assembleRelease` →
+**验签并断言证书指纹**（对不上就红：`8118b97d…` 写在 `EXPECTED_CERT` 里，指纹是公开信息）→
+算 SHA-256 写 `SHA256SUMS.txt` → 上传产物（打标签时再 `gh release create`）。
+
+**第一次跑会是红的**——那是在告诉你"secret 还没配"。这不是故障，是保险丝（见上）。
+
+### 13.3 安全上的取舍（看明白再决定）
+
+- 配了 secret，**keystore 就不再只在你机器上**：它以加密形式存在 GitHub 的 secret 里，
+  仓库管理员可见、workflow 里能取到。仓库现在是**私有**的，风险可控，但这条要说清。
+- 另一条路是**CI 只出未签名包、你本地签名**：更安全，但每次发版都要你在场（不符合"自动推进"）。
+- 两条路都**必须用同一张 keystore**：换密钥＝换应用（§8）。
+- 我（助手）**永远不会**读、写、打印口令与 keystore 内容；上面那条 base64 命令由你自己跑。
+
+## 13. 用 CI 出签名包（`FR-RLS-02` 的一半：对外分发用）
+
+**能不能用 CI 生成签名包**：能。`.github/workflows/release.yml` 已经写好，**但默认关着**——
+它只在「手动 dispatch」或「推 `v*` 标签」时跑，日常门禁还是 `ci.yml`，互不干扰。
+
+**为什么要四个 secret 才能跑**：Gradle 找不到 `keystore.properties` 时会**退回调试签名**
+（`app/build.gradle.kts` 的注释写着），那样产出的"发布包"是**假货**——装到别人手机上，
+将来用真 keystore 的升级包**覆盖不了**（`KEYSTORE.md` §8：换密钥＝换应用）。
+所以那个工作流**缺 secret 就直接红**，宁可不出包，也不出假包。
+
+### 13.1 要配的四个 secret（仓库 → Settings → Secrets and variables → Actions）
+
+| Secret 名 | 值从哪来 |
+|---|---|
+| `KEYSTORE_BASE64` | 把 `D:\keys\wheremy-release.jks` 转成一行 base64（命令见下） |
+| `KEYSTORE_STORE_PASSWORD` | `keystore.properties` 里的 `storePassword` |
+| `KEYSTORE_KEY_PASSWORD` | 同上的 `keyPassword`（PKCS12 里与 store 口令相同） |
+| （别名不设 secret） | 工作流里写死 `wheremy-release`，与 `KEYSTORE.md` §4 一致 |
+
+Windows 上转 base64（**输出是一行**，别带换行）：
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('D:\keys\wheremy-release.jks')) | Set-Clipboard
+# 然后粘进 GitHub 的 secret 输入框
+```
+
+### 13.2 跑一次
+
+```
+Actions → Release APK → Run workflow（tag 留空 = 只出包不发 Release）
+# 或者：git tag v0.1.0 && git push origin v0.1.0   ← 顺手发一个 Release
+```
+
+工作流会做五件事：还原 keystore（写在**仓库外**，与本地同一套查找路径）→ `assembleRelease` →
+**验签并断言证书指纹**（对不上就红：`8118b97d…` 写在 `EXPECTED_CERT` 里，指纹是公开信息）→
+算 SHA-256 写 `SHA256SUMS.txt` → 上传产物（打标签时再 `gh release create`）。
+
+**第一次跑会是红的**——那是在告诉你"secret 还没配"。这不是故障，是保险丝（见上）。
+
+### 13.3 安全上的取舍（看明白再决定）
+
+- 配了 secret，**keystore 就不再只在你机器上**：它以加密形式存在 GitHub 的 secret 里，
+  仓库管理员可见、workflow 里能取到。仓库现在是**私有**的，风险可控，但这条要说清。
+- 另一条路是**CI 只出未签名包、你本地签名**：更安全，但每次发版都要你在场（不符合"自动推进"）。
+- 两条路都**必须用同一张 keystore**：换密钥＝换应用（§8）。
+- 我（助手）**永远不会**读、写、打印口令与 keystore 内容；上面那条 base64 命令由你自己跑。
+
 ## 12. 我要从你这拿到的三样（口令**不要**发我）
 
 等你要正式出包时，告诉我这三样就够了：
