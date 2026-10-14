@@ -318,7 +318,13 @@ Actions → Release APK → Run workflow（tag 留空 = 只出包不发 Release�
 **验签并断言证书指纹**（对不上就红：`8118b97d…` 写在 `EXPECTED_CERT` 里，指纹是公开信息）→
 算 SHA-256 写 `SHA256SUMS.txt` → 上传产物（打标签时再 `gh release create`）。
 
-**第一次跑会是红的**——那是在告诉你"secret 还没配"。这不是故障，是保险丝（见上）。
+**第一次跑会是红的**——那是在告诉你「secret 还没配」。这不是故障，是保险丝（见上）。
+
+**已经验过（2026-10-14，run `38493705822`）**：在**没配 secret** 的情况下手动派发一次，结果是
+第 5 步「检查密钥齐不齐」失败、**后面 6–11 步全部 skipped**（没有产出任何包），
+失败输出逐字为 `##[error]缺少 secret： KEYSTORE_BASE64 KEYSTORE_STORE_PASSWORD KEYSTORE_KEY_PASSWORD`
+＋「配法：docs/KEYSTORE.md §13」＋「本工作流故意失败：没有 keystore 时 Gradle 会退回调试签名，那种包不能对外发。」
+——即 YAML 有效、保险丝生效、假包产不出来。**配上 secret 之后请再派发一次**，那时应当一路绿到产物上传。
 
 ### 13.3 安全上的取舍（看明白再决定）
 
