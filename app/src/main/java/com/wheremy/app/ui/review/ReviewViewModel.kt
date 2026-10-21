@@ -172,7 +172,11 @@ class ReviewViewModel @Inject constructor(
                         failure = null,
                         slots = state.slots.map {
                             if (it.itemId == itemId) {
-                                it.copy(draft = refreshed, locationPath = locationPathOf(refreshed.locationId))
+                                it.copy(
+                                    draft = refreshed,
+                                    aliasesText = AliasText.join(refreshed.aliases),
+                                    locationPath = locationPathOf(refreshed.locationId),
+                                )
                             } else {
                                 it
                             }
@@ -202,7 +206,24 @@ class ReviewViewModel @Inject constructor(
 
     fun setBrand(value: String) = edit("brand") { it.copy(brand = value) }
 
-    fun setAliases(value: List<String>) = edit("aliases") { it.copy(aliases = value) }
+    /**
+     * 别名框：**存原文**给输入框，列表按分隔符现算（`RULES.md` §15 W9）。
+     *
+     * 不能每键都从列表拼回输入框——那样刚敲下的分隔符/空格会在同一帧被 `parse` 吃掉。
+     */
+    fun setAliasesText(value: String) {
+        val oneLine = AliasText.oneLine(value)
+        _state.update { st ->
+            val cur = st.current ?: return@update st
+            st.withSlot(
+                cur.copy(
+                    draft = cur.draft.copy(aliases = AliasText.parse(oneLine)),
+                    aliasesText = oneLine,
+                    touched = cur.touched + "aliases",
+                ),
+            ).copy(notice = null)
+        }
+    }
 
     /** 「标签（点一下删除）」的另一半：有就摘、没有就加。 */
     fun toggleTag(value: String) = edit("tags") {
@@ -308,20 +329,24 @@ class ReviewViewModel @Inject constructor(
 
     fun consumeNotice() = _state.update { it.copy(notice = null) }
 
-    /** 换一张照片：走仓库的三步顺序，回来刷新槽位上的缩略图。 */
+    /**
+     * 换一张照片：走仓库的三步顺序，回来**只刷新缩略图**。
+     *
+     * 不能拿 `draftOf(itemId)` 覆盖槽位：那读的是库里的行，用户还没保存的手填字段
+     * （以及别名框里的原文）会被抹掉，与"填过的字段都留着"（`UI.md` §2.4）相反。
+     */
     fun replacePhoto(jpeg: ByteArray) {
-        val cur = _state.value.current ?: return
-        val itemId = cur.itemId ?: return
+        val itemId = _state.value.current?.itemId ?: return
         viewModelScope.launch {
             runCatching { captureFlow.replacePhoto(itemId, jpeg) }
-                .onSuccess { draft ->
+                .onSuccess {
+                    val thumb = items.thumbPathOf(itemId)?.let { items.photoStore.file(it).absolutePath }
                     _state.update { st ->
-                        st.withSlot(
-                            cur.copy(
-                                draft = draft,
-                                thumbPath = items.thumbPathOf(itemId)
-                                    ?.let { items.photoStore.file(it).absolutePath },
-                            ),
+                        // 按 itemId 找槽位：异步回来时用户可能已经切到别的那件
+                        st.copy(
+                            slots = st.slots.map { slot ->
+                                if (slot.itemId == itemId) slot.copy(thumbPath = thumb) else slot
+                            },
                         )
                     }
                 }

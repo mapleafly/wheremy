@@ -12,7 +12,7 @@ Android 应用，**没有账号、没有云、没有服务端**：数据只在�
 [`docs/RELEASE.md`](docs/RELEASE.md) §10）。日常门禁与发布流程都是绿的：
 
 - 本地等价 CI：`pwsh -File artifacts/tools/ci-local.ps1`（四道门：静态检查 / 单元测试 / 截图回归 / 发布构建）
-- 真 CI：[`.github/workflows/ci.yml`](.github/workflows/ci.yml)，测试合计 **47 份 XML / 300 例**
+- 真 CI：[`.github/workflows/ci.yml`](.github/workflows/ci.yml)，测试合计 **48 份 XML / 305 例**（2026-10-21 本地全量；这一轮尚未推 CI）
 
 ## 它能做什么
 

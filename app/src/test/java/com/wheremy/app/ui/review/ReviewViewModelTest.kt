@@ -223,6 +223,25 @@ class ReviewViewModelTest {
     }
 
     @Test
+    fun `换一张照片不抹掉还没保存的手填字段`() {
+        val itemId = newDraftItem()
+        vm.start(itemId)
+        awaitState("槽位就绪") { it.current != null }
+        vm.setName("电钻")
+        vm.setAliasesText("钻、电钻 ")
+        val oldThumb = vm.state.value.current!!.thumbPath
+
+        vm.replacePhoto(testJpeg(width = 500, height = 500))
+
+        // 等缩略图真的换掉；别用 aliasesText 等——它换图之前就是那个值
+        awaitState("缩略图换掉") { it.current?.thumbPath != null && it.current?.thumbPath != oldThumb }
+        val slot = vm.state.value.current!!
+        assertEquals("手填的名字要留着", "电钻", slot.draft.name)
+        assertEquals("别名原文要留着", "钻、电钻 ", slot.aliasesText)
+        assertEquals("落库列表仍按分隔符拆", listOf("钻", "电钻"), slot.draft.aliases)
+    }
+
+    @Test
     fun `不要这件只对没落库的有效且不能摘最后一件`() {
         val itemId = newDraftItem()
         vm.start(itemId)

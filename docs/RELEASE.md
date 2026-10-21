@@ -386,9 +386,9 @@ $ADB -s 9aa4b43e shell am start -n com.wheremy.app/.MainActivity
     ```
     跑通之后把结论记进 `PLAN.md` §3.3 的 CI 行（把「仍未跑过」划掉、写上日期与 run 链接）。
     本地等价验证见 `PLAN.md` §3.3 的说明与 `artifacts/tools/ci-local.ps1`。
-11. [ ] 自己数出 `tests=300 failures=0 errors=0`——**不认 exit code**（G1）。（数字随批次增长，当前 47 类 / 300 例，2026-10-14；`pwsh -File artifacts/tools/ci-local.ps1 -Cold` 会替你跑完四道门并报合计。）
+11. [ ] 自己数出 `tests=305 failures=0 errors=0`——**不认 exit code**（G1）。（数字随批次增长，当前 48 类 / 305 例，2026-10-21；`pwsh -File artifacts/tools/ci-local.ps1 -Cold` 会替你跑完四道门并报合计。）
 12. [ ] 覆盖对账正向：`PRD.md` §7 每行都能落到真实存在的测试类，`@Test` 数与表一致（G3）。
-13. [ ] 覆盖对账反向：**47 个类 / 300 例**（G3；数字随批次增长）。
+13. [ ] 覆盖对账反向：**48 个类 / 305 例**（G3；数字随批次增长）。
 14. [ ] 变异验牙：本批每一处改动都做过"改坏它 → 期望那条红"；无牙的补或删（G2）。
 15. [ ] `gradle :app:assembleDebug`，确认 `app/build/outputs/apk/debug/app-debug.apk` 的 mtime 是本轮的（G0）。
 16. [ ] 记下 APK 的 SHA-256（§8.2）。

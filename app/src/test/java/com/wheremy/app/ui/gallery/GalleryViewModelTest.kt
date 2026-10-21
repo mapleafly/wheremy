@@ -1,6 +1,7 @@
 package com.wheremy.app.ui.gallery
 
 import android.content.Context
+import androidx.lifecycle.viewModelScope
 import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import com.wheremy.app.data.db.ItemEntity
@@ -17,6 +18,8 @@ import com.wheremy.app.util.expireWindowEnd
 import com.wheremy.app.util.localStartOfDay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -65,14 +68,24 @@ class GalleryViewModelTest {
         locations = LocationRepository(db, store)
     }
 
+    /** 本类建过的 VM：tearDown 里要先取消再关库（见下）。 */
+    private val vms = mutableListOf<GalleryViewModel>()
+
     @After
     fun tearDown() {
+        // 不清会把"connection is closed"留给下一条 Compose 用例，报成
+        // UncaughtExceptionsBeforeTest（真 CI 抓到过）。取消后 join 等 Room 查询真的收尾。
+        vms.forEach { vm ->
+            vm.viewModelScope.cancel()
+            runBlocking { vm.viewModelScope.coroutineContext.job.join() }
+        }
         db.close()
         Dispatchers.resetMain()
     }
 
     private fun gallery(inboxMode: Boolean = false): GalleryViewModel =
         GalleryViewModel(items, locations, testSettings()).also {
+            vms += it
             it.setInboxMode(inboxMode)
         }
 

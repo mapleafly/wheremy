@@ -127,7 +127,7 @@ VM 的取用统一走 `appViewModel(container, key = "…") { … }`（`AppViewM
 
 第 2 条那行注释（`:251`）是事故换来的：**系统返回和那颗 ✕ 必须走同一个门**，否则手打的改动还没写库时，返回键会直接关页、绕过退出确认。
 
-上面那张表只管"屏"这一层。全应用 12 处弹框的 `onDismissRequest` 一律**只关自己、不写库**，所以无论返回键落到哪儿都不会顺手改数据：`ReviewScreen.kt:318`/`:339` 的 `vm::cancelExit`、`DetailScreen.kt:162` 与 `GalleryScreen.kt:179` 的 `vm.closeDeleteAsk()`、`GalleryScreen.kt:148` 与 `TreeScreen.kt:154` 的 `menuFor = null`、`TreeScreen.kt:196` 的 `confirmDelete = null`、`SettingsScreen.kt:104` 的 `confirmOverwrite = false`、`TreeScreen.kt:294` 的 `onDismissRequest = onDismiss`（`LocationEditDialog`，落地为 `TreeScreen.kt:140` 的"只关框"）、`WheremyRoot.kt:216` 的 `askingFor = PhotoTarget.NONE.name`，加上 `LocationPicker.kt:41` 与 `ReviewScreen.kt:480` 透传的 `onDismiss`。🔒 重做时别把任何一处 `onDismissRequest` 写成"顺手保存"或"顺手删除"。
+上面那张表只管"屏"这一层。全应用 13 处弹框的 `onDismissRequest` 一律**只关自己、不写库**，所以无论返回键落到哪儿都不会顺手改数据：`ReviewScreen.kt:318`/`:339` 的 `vm::cancelExit`、`DetailScreen.kt:162` 与 `GalleryScreen.kt:179` 的 `vm.closeDeleteAsk()`、`GalleryScreen.kt:148` 与 `TreeScreen.kt:154` 的 `menuFor = null`、`TreeScreen.kt:196` 的 `confirmDelete = null`、`SettingsScreen.kt:104` 的 `confirmOverwrite = false`、`TreeScreen.kt:294` 的 `onDismissRequest = onDismiss`（`LocationEditDialog`，落地为 `TreeScreen.kt:140` 的"只关框"）、`WheremyRoot.kt:216` 的 `askingFor = PhotoTarget.NONE.name`，加上 `LocationPicker.kt:41` 与 `ReviewScreen.kt:480` 透传的 `onDismiss`，以及 `DetailScreen.kt` 全屏大图窗的 `onDismissRequest = onClose`（只关大图，不碰任何数据）。🔒 重做时别把任何一处 `onDismissRequest` 写成"顺手保存"或"顺手删除"。
 
 ### 2.4 照片路由：`deliverPhoto` 是唯一收口 🔒
 
@@ -415,6 +415,10 @@ VM 侧另有 `DetailViewModelTest.kt:140` 断言 `deleted` 置位。
 
 - **有照片**：横向可滑的一段图（`LazyRow`），**第一张就是封面**（`RULES.md` §3.4）；
   每张的右上角一颗小按钮 🗣「删掉这张」；列表末尾一颗 🗣「加照片」。
+- **点一张照片** → 全屏看大图：黑底 + `ContentScale.Fit`，双指可放大到 5 倍、可拖动；
+  右上角 🗣「关闭大图」，系统返回键同样只关这扇窗（`Dialog` 的 `onDismissRequest`）。
+  读屏的动作名是 🗣「查看大图」，放大后的图念 🗣「放大的物品照片」。
+  大图是**另一块画布**，不改墙上 `Crop` / 录入页 `Fit` 的分工，也不新增第七个照片格。
 - **没照片**：一个占位块 + 「加照片」（无照片物品是合法状态，`FR-SRC-09`）。
 - 「加照片」走到与录入页同一条来源弹窗（拍照 / 选图），成功后**追加**到末尾；
   到 9 张上限时按钮置灰，点了说 🗣「一件物品最多 9 张照片」（`RULES.md` §3.4 📐）。
@@ -497,8 +501,14 @@ VM 侧另有 `DetailViewModelTest.kt:140` 断言 `deleted` 置位。
 **文本输入的三条事实**（照着抄键盘行为要用得上）：
 
 - 键盘动作只有一个地方挂了：`ReviewScreen.kt:462` 的 `KeyboardActions(onDone = { add() })`（配 `ReviewScreen.kt:461` 的 `imeAction = ImeAction.Done`），也就是只有「加标签」那颗 `ReviewScreen.kt:459` 支持敲回车/完成等于"加上"。其余字段全不带 `keyboardOptions`（`ReviewScreen.kt:238-248` 的别名、`:259-273` 的描述与备注也一样），所以这一屏上没有"跳到下一格"的行为。
-- 单行的是这五颗：`ReviewScreen.kt:182` 名称、`:218` 颜色、`:225` 材质、`:234` 品牌、`:460` 加标签；`ReviewScreen.kt:263` 描述与 `:271` 备注各带 `minLines = 2`。别名那颗**既不写 `singleLine` 也不写 `keyboardOptions`**。
-- 别名的输入与显示不对称：`ReviewScreen.kt:243` 按三个分隔符拆（`split('、', '，', ',')`，每段 `trim()`、空段丢掉），`ReviewScreen.kt:239` 只用「、」拼回去给人看；落库是英文逗号一列（`ItemRepository.kt:340`），读回来只认英文逗号（`ItemRepository.kt:337`）。⚠️ 换行不在 `:243` 那个集合里，而那颗又允许多行，所以粘一段多行文本进去会当成**一个**别名存下来。
+- 单行的是这六颗：`ReviewScreen.kt:182` 名称、`:218` 颜色、`:225` 材质、`:234` 品牌、**别名**、`:460` 加标签；`ReviewScreen.kt:263` 描述与 `:271` 备注各带 `minLines = 2`。
+- 别名那一格**显示原文、列表另算**：`ReviewSlot.aliasesText` 存用户正在打的那串字，
+  `AliasText.parse` 每键把原文换算成 `draft.aliases`（保存/落库用的列表），但**不回写输入框**；
+  `AliasText.join` 用「、」拼给输入框看。以前是每按一键就从 `draft.aliases` 拼回去，
+  于是 `、`/`，`/`,`/结尾空格会在**同一帧**被吃掉（句号不是分隔符，所以它能留下）——W9。
+  那一格现在 `singleLine = true`（换行不是分隔符），`AliasText.oneLine` 再把粘进来的 `\n`/`\r` 折成空格
+  ——**`singleLine` 只改渲染，实测新行仍会进 `onValueChange`**。测试 tag 是 `field_aliases`。
+  落库仍是英文逗号一列（`ItemRepository.kt:340`），读回来只认英文逗号（`ItemRepository.kt:337`）。
 - `ReviewViewModel.kt:303-308` 的 `toggleTag` 是"有就摘、没有就加"：`ReviewScreen.kt:250` 的 label 说的「标签（点一下删除）」正是这件事的另一半，而在加标签那颗重敲一个已存在的标签 = 把它删掉。标签文字走的是另一条存储路（`ItemRepository.kt:303-305` 一标签一行，`distinct()`），**不经过** `csv()`，所以标签里带逗号不会被拆成两个。
 
 `expireLabel`（`ReviewScreen.kt:397-400`）：未设置 → `ReviewScreen.kt:398` 「未设置」；否则 `:399` 拼 `${kind ?: "到期"} · ${formatDate}（${expireHint}）`，即 `到期 · 2026-11-03（还剩 28 天）` 这个形状。括号里的三种说法来自 `UiFormat.kt:7-11`（天数为插值），全应用共用。
@@ -724,11 +734,11 @@ LaunchedEffect(state.finished) {
 |---|---|---|
 | W1 | ~~支二退出框对已经确认（`CONFIRMED`）的物品仍说"……状态还是草稿，会出现在「待归类」"~~ **2026-10-06 复核：造不出那个状态，已闭合** | 那两句在 `ReviewScreen.kt:346-348`、`:351`（整句是「照片和 AI 填的信息已经在库里了，状态还是草稿，会出现在「待归类」。」）；成立条件与钉住它的测试见 `RULES.md` §15 W1 |
 | W7 | `state.error` 与 `state.notice` 在录入页可以同屏并存（`ReviewScreen.kt:170-176`），没有优先级 | `RULES.md` §15 W7 |
-| W9 | 别名那一格没有 `singleLine`、也没有 `maxLines`，而它的值每按一键就被切分一次，换行不在切分字符里 | `ReviewScreen.kt:238-248`；为什么不动它见 `RULES.md` §15 W9，§6.5 有这一格的三条输入事实 |
+| W9 | ~~别名那一格没有 `singleLine`、也没有 `maxLines`，而它的值每按一键就被切分一次，换行不在切分字符里~~ **2026-10-21 已修**：输入框改存原文（`ReviewSlot.aliasesText`），`、`/`，`/`,`/空格不再被同一帧吃掉；同时加 `singleLine = true` 与 `AliasText.oneLine`（换行折成空格）。真机验收通过（Xiaomi 13） | `ReviewScreen.kt` 的 `field_aliases`、`AliasText.kt`；守门测试 `ReviewAliasInputTest`（3 例）；行为说明见 §6.5，修法记录见 `RULES.md` §15 W9 |
 | W10 | 同一个"名字没填"在两个弹窗里两种反馈：一处按钮变灰，一处点了什么都没发生 | `LocationPicker.kt:73` 与 `TreeScreen.kt:326`；见 §4.7，`RULES.md` §15 W10 |
 | W11 | 六处照片格在文件丢失或解不开时是**空的**，那一格自己一句话都不说——说到"读不出照片"的三句分别在选图回传、解码抛出和重新分析三条路上，都不在显示它的那一格上 | `ItemRow.kt:42`、`GalleryScreen.kt:280`、`DetailScreen.kt:125`、`ReviewScreen.kt:144`、`TreeScreen.kt:222`、:256；三句各管哪一段见 §9，为什么不动它见 `RULES.md` §15 W11 |
 
-这四条（W7、W9、W10、W11）都是**记录不改**的状态：本文照实描述，不代表它们是对的。W1 已经不是一种偏差，留在表里只是因为那两句的开关值得说清楚。
+这三条（W7、W10、W11）都是**记录不改**的状态：本文照实描述，不代表它们是对的。W1 与 W9 已经不是偏差，留在表里只是因为那两句/那一格的开关值得说清楚。
 
 ## 15. 只能真机看的界面事实
 

@@ -130,7 +130,7 @@
 | W6 | `DetailViewModel` 无 seq 守卫 | 从第一天加 seq 守卫 | |
 | W7 | `notice` 与 `error` 并存无优先级 | 明确优先级（error 压 notice）并写测试 | |
 | W8 | 异常 `message`（英文）原样上屏 | 白名单映射，**界面零英文异常**；补一条"磁盘满"的用例 | |
-| W9 | 别名输入框无 `singleLine`，换行会成一个别名 | `singleLine = true` + 换行按分隔符处理，并写测试 | |
+| W9 | 别名输入框无 `singleLine`，换行会成一个别名 | ✅ 已做（2026-10-21）：`ReviewSlot.aliasesText` 存输入框原文（否则 `、`/`，`/`,`/空格会被同一帧吃掉）+ `singleLine = true` + `AliasText.oneLine`（换行折空格）；落库列表仍按三个分隔符拆 | `ReviewAliasInputTest`（3 例）；2026-10-21 真机通过 |
 | W10 | "名字没填"两个弹窗两种反馈 | 统一为"按钮禁用"（`RULES.md` §15 W10 自己给的建议） | |
 | W11 | 六处 `AsyncImage` 无 `placeholder`/`error`，图丢了那一格空白 | 统一组件 `ItemImage`：有"图丢了"的明确占位与一句文案 | |
 | 文案 | 逐字文案两处抄本（`RULES.md`/`UI.md`）易漂 | 本实现用 `strings.xml` 资源（T1）+ 一个"文案对齐"测试：资源值与文档逐字表比对 | |
@@ -184,7 +184,7 @@
 | CI | 无 | GitHub Actions：`spotlessCheck` + `testDebugUnitTest`（⏳ 文件已写，**未在真 GitHub 跑过**） | `.github/workflows/ci.yml` |
 | 静态检查 | 无 | Spotless 8.10.3（内含 ktlint 1.4.0）✅ 已落地；**不引 detekt** | `:app:spotlessCheck` 通过；Compose 函数命名用 `editorConfigOverride` 放行（发现 F3） |
 | 截图回归 | 无 | Roborazzi 1.76.0 ✅ 已落地（当前 2 张：浅/深色画廊基线） | `app/build/outputs/roborazzi/design-gallery-{light,dark}.png`；`recordRoborazziDebug` / `verifyRoborazziDebug` |
-| 测试分层 | JVM + Robolectric 39 类 / 481 例 | 分层相同；**P0 基线 4 类 / 6 例 → 现在 47 类 / 300 例**（2026-10-14） | `BuildSmokeTest`、`DatabaseSmokeTest`、`DesignGalleryTest`、`DesignGalleryScreenshotTest` |
+| 测试分层 | JVM + Robolectric 39 类 / 481 例 | 分层相同；**P0 基线 4 类 / 6 例 → 现在 48 类 / 305 例**（2026-10-21） | `BuildSmokeTest`、`DatabaseSmokeTest`、`DesignGalleryTest`、`DesignGalleryScreenshotTest` |
 | 编译目标 | compileSdk 36 / targetSdk 36 | **compileSdk 37** / targetSdk 36 ✅（Compose 1.12.1 的硬要求，发现 F1） | `app/build.gradle.kts` |
 | 数据 | Room 2.8.5（`androidx.room`） | **Room 3.0.3（`androidx.room3`）** ✅ 四表/三 DAO 已落地 | `DatabaseSmokeTest` 等 8 类 32 例；**导出的 schema 与参照逐字段一致**（F11）。⚠️ 3.x 把 `@TypeConverter/@TypeConverters` 改名为 `@ColumnTypeConverter/@ColumnTypeConverters`（F10） |
 | 照片管线 | `PhotoStore` + `PhotoReclaim`（1600/256/1024 三档） | 同档位同常量 ✅ 已落地 + 公开了三档常量供测试断言 | `PhotoStoreTest` 6 例；真机自检 `EXIF 800×400 → 400×800` ✅ |

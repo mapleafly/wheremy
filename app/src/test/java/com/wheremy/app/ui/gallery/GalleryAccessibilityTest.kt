@@ -8,6 +8,7 @@ import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.viewModelScope
 import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.RoborazziATFAccessibilityCheckOptions
@@ -23,6 +24,8 @@ import com.wheremy.app.data.testJpeg
 import com.wheremy.app.ui.theme.WheremyTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -63,6 +66,12 @@ class GalleryAccessibilityTest {
 
     @After
     fun tearDownDispatcher() {
+        // 先取消 VM 再关库：refresh() 的查询收尾后才允许 close，不然会把
+        // "connection is closed" 留给下一条用例（UncaughtExceptionsBeforeTest）
+        galleryVm?.let {
+            it.viewModelScope.cancel()
+            runBlocking { it.viewModelScope.coroutineContext.job.join() }
+        }
         Dispatchers.resetMain()
         // 内存库必须关：不关的话它的后台协程会把未捕获异常留到下一条测试里
         // （报成 UncaughtExceptionsBeforeTest，真 CI 抓到过）
@@ -70,6 +79,7 @@ class GalleryAccessibilityTest {
     }
 
     private lateinit var db: WheremyDatabase
+    private var galleryVm: GalleryViewModel? = null
 
     @get:Rule
     val tmp = TemporaryFolder()
@@ -122,6 +132,7 @@ class GalleryAccessibilityTest {
         }
 
         val vm = GalleryViewModel(items, LocationRepository(db, store), testSettings())
+        galleryVm = vm
         compose.setContent {
             WheremyTheme(darkTheme = false) {
                 GalleryScreen(

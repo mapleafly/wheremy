@@ -1,6 +1,7 @@
 package com.wheremy.app.ui.gallery
 
 import android.content.Context
+import androidx.lifecycle.viewModelScope
 import androidx.room3.Room
 import androidx.test.core.app.ApplicationProvider
 import com.wheremy.app.data.db.PhotoOwner
@@ -13,6 +14,8 @@ import com.wheremy.app.data.settings.testSettings
 import com.wheremy.app.data.testJpeg
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -63,13 +66,21 @@ class BatchOperationsTest {
         locations = LocationRepository(db, store)
     }
 
+    private val vms = mutableListOf<GalleryViewModel>()
+
     @After
     fun tearDown() {
+        // 先取消再关库：refresh() 的查询收尾后才允许 close，不然会把
+        // "connection is closed" 留给下一条用例（UncaughtExceptionsBeforeTest）
+        vms.forEach { vm ->
+            vm.viewModelScope.cancel()
+            runBlocking { vm.viewModelScope.coroutineContext.job.join() }
+        }
         db.close()
         Dispatchers.resetMain()
     }
 
-    private fun gallery() = GalleryViewModel(items, locations, testSettings())
+    private fun gallery(): GalleryViewModel = GalleryViewModel(items, locations, testSettings()).also { vms += it }
 
     private fun add(name: String, category: String? = null, locationId: String? = null): String = runBlocking {
         val id = items.newDraft(testJpeg())

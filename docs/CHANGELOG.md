@@ -5,6 +5,69 @@
 
 ---
 
+## 2026-10-21 · 用户报的两个问题：别名框吃分隔符/空格；详情页照片不能点开大图
+
+**用户报**：① 确认物品信息页的别名框打不进顿号、逗号、空格，句号却能打进去；
+② 物品详情页的照片能不能点开放大。
+
+### ① 别名输入框（真 bug，W9 结案）
+
+**根因不在输入法**：那一格的 `value` 是每帧从 `draft.aliases` 用「、」拼回去的，
+`onValueChange` 又立刻 `split('、','，',',').map{trim()}.filter{isNotEmpty}`。
+刚敲下的分隔符变成结尾空段被丢掉、结尾空格被 `trim()` 掉——**同一帧就没了**，
+所以键盘上按了像没反应；句号不是分隔符，所以只有它能留下。
+
+**修法**：
+- `ReviewSlot.aliasesText` 只存输入框**原文**；`AliasText.parse` 每键把原文换算成 `draft.aliases`
+  （`、`/`，`/`,`，每段 `trim()`、空段丢掉；**不回写输入框**），`AliasText.join` 用「、」拼给输入框看；
+- 那一格加 `singleLine = true`；并用 `AliasText.oneLine` 把粘进来的 `\n`/`\r` 折成空格
+  ——实测 `singleLine` 只改渲染，新行仍会进 `onValueChange`（W9 的另一半）；
+- `setAliases` 换成 `setAliasesText`（仍记 `touched`）；AI 回填时把原文一起同步（换图不再清字段，见下）。
+
+**测试**：新增 `ReviewAliasInputTest`（3 例）——按真人节奏逐键敲
+「围巾、帽子，手套,小米 11。」，断言输入框原文一个字符不少、`draft.aliases` 仍是四项；
+另一例粘「围巾\n帽子」，断言原文折成「围巾 帽子」、仍然**一个**别名。
+**变异验牙**：把 `value` 改回 `AliasText.join(...)`，两条分隔符用例红
+（`ReviewAliasInputTest.kt:117`/`:127`）；把 `AliasText.oneLine` 改成恒等函数，换行那例红；恢复后全绿。
+
+### ② 详情页点图看大图（新增小交互）
+
+以前缩略图没有任何点击动作，只有右上角「删掉这张」。现在点任意一张 →
+`Dialog` 全屏黑底、`ContentScale.Fit`、双指缩放 1–5 倍可拖动；右上角 🗣「关闭大图」，
+系统返回键只关这扇窗；**不改**墙上 `Crop` / 录入页 `Fit` 的分工，也不新增照片格。
+
+**测试**：`DetailScreenPhotoTest` 从 5 例加到 6 例（点开、关闭）。
+**变异验牙**：删掉缩略图上的 `clickable` → 新那一例红；恢复后绿。
+
+### 顺带修掉的一处数据丢失
+
+`ReviewViewModel.replacePhoto` 原先拿 `items.draftOf(itemId)` 覆盖整个槽位，
+而那是**库里**的行——用户还没保存的手填字段（以及刚打的别名原文）会被换图顺手抹掉，
+与 `UI.md` §2.4「填过的字段都留着」相反。现在换图回来**只刷新缩略图**，并按 `itemId` 找槽位
+（异步回来时可能已经切到别的那件）。`ReviewViewModelTest` 加一例
+「换一张照片不抹掉还没保存的手填字段」钉住。
+
+### 顺带：UI 测试 teardown 的查询泄漏（让全量门禁恢复稳定）
+
+`GalleryViewModelTest` / `GalleryAccessibilityTest` / `BatchOperationsTest` 建出来的
+`GalleryViewModel` 在测试结束时可能还有 `refresh()` 的 `itemDao.all()` 在飞；`db.close()` 之后它抛
+`connection is closed`，被下一条 Compose 用例的 `runTest` 记成 `UncaughtExceptionsBeforeTest`
+（全量跑时稳定挂在 `ReviewAccessibilityTest` 的第三条，单跑该类却绿）。
+现在这三类在 `@After` 里先 `viewModelScope.cancel()`、再 `join()`，**最后**才关库。
+只动测试、不动产品代码。
+
+**判绿（2026-10-21 本地）**：`spotlessCheck` / `testDebugUnitTest`（48 类 **305 例**，0 失败）/
+`verifyRoborazziDebug` / `assembleRelease` 四道门全绿。**尚未推 CI**。
+
+**真机验收（2026-10-21，Xiaomi 13 / `2211133C` / Android 16）**：调试包 `com.wheremy.app.dsh`
+（`adb install -r`，原有数据保留）装到真机后，用户逐项试过并确认：① 别名框能输入 `、` `，` `,` 与空格，
+句号正常；② 详情页点图可全屏、双指缩放、关闭与返回键都对。**两项均通过。**
+
+**文档同步**：`RULES.md` §15 W9 改为已修；`UI.md` §5.9（大图）、§6.5（别名原文）、§14（W9 已修）；
+`PRD.md` FR-OPR-01 补大图；`DELTA.md` W9、`PROJECT.md` R9 同步。
+
+---
+
 ## 2026-10-14 · 发布管道打通：CI 出签名包 → 真机冒烟 → Release 上线
 
 用户配好三个 secret 之后，整条路当天打通（证据都在 `RELEASE.md` §9.1）：

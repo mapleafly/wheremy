@@ -245,16 +245,15 @@ fun ReviewScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
-                value = cur.draft.aliases.joinToString("、"),
-                onValueChange = { raw ->
-                    vm.setAliases(
-                        raw.split('、', '，', ',')
-                            .map { it.trim() }
-                            .filter { it.isNotEmpty() },
-                    )
-                },
+                // 显示**用户正在打的那串原文**：从 aliases 拼回去会把刚敲的分隔符/空格吃掉（W9）
+                value = cur.aliasesText,
+                onValueChange = vm::setAliasesText,
                 label = { Text("别名（顿号分隔，方便日后搜到）") },
-                modifier = Modifier.fillMaxWidth(),
+                // 换行不是分隔符（W9）：一颗单行输入框，粘贴带换行的文本不会被当第二个别名
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("field_aliases"),
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(WheremySpacing.xs)) {

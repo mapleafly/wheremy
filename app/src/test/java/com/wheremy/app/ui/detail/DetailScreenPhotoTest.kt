@@ -7,6 +7,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -149,5 +151,22 @@ class DetailScreenPhotoTest {
             .performScrollToIndex(ItemRepository.MAX_PHOTOS_PER_ITEM)
 
         compose.onNodeWithTag("detail_add_photo").assertIsNotEnabled()
+    }
+
+    /**
+     * 点照片 → 全屏大图；「关闭大图」→ 回到详情（`UI.md` §5.9）。
+     *
+     * 这里只钉"这扇窗打得开、关得上"；双指缩放的**手感**只能真机看。
+     */
+    @Test
+    fun `点照片打开全屏大图，关闭回到详情`() {
+        val id = newItem(photos = 2)
+        render(id)
+
+        compose.onAllNodesWithTag("detail_photo")[0].performClick()
+        compose.onNodeWithTag("detail_photo_viewer").assertIsDisplayed()
+
+        compose.onNodeWithContentDescription("关闭大图").performClick()
+        compose.onNodeWithTag("detail_photo_viewer").assertDoesNotExist()
     }
 }

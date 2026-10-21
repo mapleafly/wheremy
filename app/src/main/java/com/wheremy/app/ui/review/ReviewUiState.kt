@@ -12,6 +12,11 @@ import com.wheremy.app.ui.LocationGuessOutcome
 data class ReviewSlot(
     val itemId: String?,
     val draft: ItemDraft,
+    /**
+     * 别名输入框里的**原文**（`RULES.md` §15 W9）：分隔符与结尾空格要留在框里，
+     * 所以不能从 `draft.aliases` 每帧拼回去。真值仍是 [draft] 里的 `aliases`。
+     */
+    val aliasesText: String = AliasText.join(draft.aliases),
     val saved: Boolean = false,
     /** 用户**手打**过的字段名；空 = 一个字都没动过。空壳判定要用它。 */
     val touched: Set<String> = emptySet(),

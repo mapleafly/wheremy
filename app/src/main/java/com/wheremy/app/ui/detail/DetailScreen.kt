@@ -1,6 +1,8 @@
 package com.wheremy.app.ui.detail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,14 +35,23 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -69,6 +80,8 @@ fun DetailScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    // 点某一张照片 → 全屏查看（null = 没开）。状态留在这一屏：两张缩略图共用同一扇窗
+    var viewerPhoto by remember { mutableStateOf<DetailPhoto?>(null) }
 
     LaunchedEffect(itemId) { vm.load(itemId) }
 
@@ -124,10 +137,15 @@ fun DetailScreen(
                     photos = state.photos,
                     canAddPhoto = state.canAddPhoto,
                     onAddPhoto = onAddPhoto,
+                    onOpenPhoto = { viewerPhoto = it },
                     onAskRemove = vm::askRemovePhoto,
                 )
             }
         }
+    }
+
+    viewerPhoto?.let { photo ->
+        PhotoViewer(photo = photo, onClose = { viewerPhoto = null })
     }
 
     if (state.pendingRemove != null) {
@@ -184,6 +202,7 @@ private fun DetailBody(
     photos: List<DetailPhoto>,
     canAddPhoto: Boolean,
     onAddPhoto: () -> Unit,
+    onOpenPhoto: (DetailPhoto) -> Unit,
     onAskRemove: (DetailPhoto) -> Unit,
 ) {
     // 1 名称
@@ -225,7 +244,11 @@ private fun DetailBody(
                     // 这里是一排照片（不是什么有名字的东西），给一句能听懂的说明
                     contentDescription = "物品照片",
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // 点图放大：`onClickLabel` 让读屏把动作念出来（`UI.md` §5.9）
+                        .clickable(onClickLabel = "查看大图") { onOpenPhoto(photo) }
+                        .testTag("detail_photo"),
                 )
                 IconButton(
                     onClick = { onAskRemove(photo) },
@@ -311,6 +334,61 @@ private fun DetailBody(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     HorizontalDivider()
+}
+
+/** 大图最多放到几倍（纯手感值，不参与任何业务判断）。 */
+private const val MAX_VIEWER_SCALE = 5f
+
+/**
+ * 全屏看一张照片（`UI.md` §5.9）。
+ *
+ * 关闭只有两条路：右上角「关闭大图」与系统返回键（`Dialog` 的 `onDismissRequest`）。
+ * 不给"点图片就关"——双指缩放抬手时容易误触，正在看的东西不该被自己弄丢。
+ */
+@Composable
+private fun PhotoViewer(photo: DetailPhoto, onClose: () -> Unit) {
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        var scale by remember { mutableFloatStateOf(1f) }
+        var offset by remember { mutableStateOf(Offset.Zero) }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .testTag("detail_photo_viewer")
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(1f, MAX_VIEWER_SCALE)
+                        // 回到 1 倍时把平移清零：否则图会停在偏移过的位置，看起来像"没居中"
+                        offset = if (scale <= 1f) Offset.Zero else offset + pan
+                    }
+                },
+        ) {
+            AsyncImage(
+                model = File(photo.path),
+                contentDescription = "放大的物品照片",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offset.x
+                        translationY = offset.y
+                    },
+            )
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(WheremySpacing.md),
+            ) {
+                Icon(Icons.Filled.Close, contentDescription = "关闭大图", tint = Color.White)
+            }
+        }
+    }
 }
 
 /** 值为 `null` 或空白时**整行不给**：不许出现"品牌：（空）"。 */
