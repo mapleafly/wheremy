@@ -56,8 +56,9 @@
 现在这三类在 `@After` 里先 `viewModelScope.cancel()`、再 `join()`，**最后**才关库。
 只动测试、不动产品代码。
 
-**判绿（2026-10-21 本地）**：`spotlessCheck` / `testDebugUnitTest`（48 类 **305 例**，0 失败）/
-`verifyRoborazziDebug` / `assembleRelease` 四道门全绿。**尚未推 CI**。
+**判绿（2026-10-21）**：本地 `spotlessCheck` / `testDebugUnitTest`（48 类 **305 例**，0 失败）/
+`verifyRoborazziDebug` / `assembleRelease` 四道门全绿；推送后 GitHub CI
+[run `39601856477`](https://github.com/mapleafly/wheremy/actions/runs/39601856477) **全绿（7m1s）**。
 
 **真机验收（2026-10-21，Xiaomi 13 / `2211133C` / Android 16）**：调试包 `com.wheremy.app.dsh`
 （`adb install -r`，原有数据保留）装到真机后，用户逐项试过并确认：① 别名框能输入 `、` `，` `,` 与空格，
